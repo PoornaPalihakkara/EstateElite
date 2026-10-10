@@ -1,7 +1,7 @@
 # Estate Elite
 
 **Web-based Property Sales System**  
-SE2030 – Software Engineering | Year 2, Semester 1 – 2026  
+SE2030 - Software Engineering | Year 2, Semester 1 - 2026  
 Group **26-MTR-SE2030-04** | Sri Lanka Institute of Information Technology (SLIIT)
 
 Estate Elite is a full-stack web platform for buying and selling residential properties in Sri Lanka. Sellers list properties, buyers search and reserve, agents manage viewings, finance officers handle invoices and payments, and admins maintain agencies and content moderation.
@@ -166,14 +166,14 @@ Register through the UI and select a role, or seed users as required for demos:
 
 ## Team
 
-| IT Number   | Name                 | Major function                          | Scrum role        |
-|-------------|----------------------|-----------------------------------------|-------------------|
-| IT25100170  | Thanthrige P.D.I.    | Agency Management                       | Dev / QA          |
-| IT25101160  | Rukmalgoda R.D.D.    | Reviews, Ratings & Notifications        | Dev / QA          |
-| IT25101986  | Thashmina P.G.D.     | Property Seller Module                  | Scrum Master      |
-| IT25102047  | Palihakkara P.J.     | Payment & Transaction Module            | Product Owner     |
-| IT25102054  | Dinali L.D.G.N.      | Agent Viewing & Appointment Module      | Development Team  |
-| IT25102115  | Malka H.A.G.         | Buyer Search & Wishlist Module          | Development Team  |
+| IT Number   | Name                 | Major function                          |
+|-------------|----------------------|-----------------------------------------|
+| IT25100170  | Thanthrige P.D.I.    | Agency Management                       | 
+| IT25101160  | Rukmalgoda R.D.D.    | Reviews, Ratings & Notifications        | 
+| IT25101986  | Thashmina P.G.D.     | Property Seller Module                  | 
+| IT25102047  | Palihakkara P.J.     | Payment & Transaction Module            | 
+| IT25102054  | Dinali L.D.G.N.      | Agent Viewing & Appointment Module      | 
+| IT25102115  | Malka H.A.G.         | Buyer Search & Wishlist Module          | 
 
 ---
 
@@ -181,18 +181,16 @@ Register through the UI and select a role, or seed users as required for demos:
 
 Four Scrum sprints (12 weeks):
 
-1. **Sprint 1** – Platform foundation & core creation (auth, listing, search, slots, agency, deposit)  
-2. **Sprint 2** – Core interactions (edit listing, wishlist, confirm appointments, invoices, reviews)  
-3. **Sprint 3** – Business rules & validation (access control, double-booking, refunds, notifications)  
-4. **Sprint 4** – Polish, moderation & nice-to-haves (reschedule, comparison, flags, inbox)
+1. **Sprint 1** - Platform foundation & core creation (auth, listing, search, slots, agency, deposit)  
+2. **Sprint 2** - Core interactions (edit listing, wishlist, confirm appointments, invoices, reviews)  
+3. **Sprint 3** - Business rules & validation (access control, double-booking, refunds, notifications)  
+4. **Sprint 4** - Polish, moderation & nice-to-haves (reschedule, comparison, flags, inbox)
 
 ---
 
-## Screenshots
+## User Interfaces
 
-> Add screenshots under `/docs/screenshots/` and link them here after push.
-
-| Screen | Description |
+| User Interface | Description |
 |--------|-------------|
 | Home | Hero, CTAs, feature highlights |
 | Browse | District / price / bedroom filters and property cards |
@@ -204,27 +202,19 @@ Four Scrum sprints (12 weeks):
 
 ---
 
-## API / form notes
-
-- JSON APIs use `Api.post()` / `Api.get()` helpers in `static/js`.  
-- Bank-transfer flows use **multipart** form posts (`Api.postForm`) for receipt upload.  
-- Theme preference is stored in `localStorage` and applied via `data-theme` on `<html>` so it stays consistent across pages.
-
----
-
 ## License
 
-Academic project for **SE2030 – Software Engineering**, SLIIT.  
+Academic project for **SE2030 - Software Engineering**, SLIIT.  
 Not licensed for commercial use unless the group decides otherwise.
 
 ---
 
 ## Acknowledgments
 
-- SLIIT Faculty of Computing – SE2030 module  
+- SLIIT Faculty of Computing - SE2030 module  
 - Lab sheets: Agile Development, Design Patterns  
 - Group 26-MTR-SE2030-04
 
 ---
 
-**Estate Elite** — premium property sales, built with Spring Boot.
+**Estate Elite** - premium property sales, built with Spring Boot.
