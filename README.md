@@ -2,7 +2,7 @@
 
 **Web-based Property Sales System**  
 SE2030 - Software Engineering | Year 2, Semester 1 - 2026  
-Group **26-MTR-SE2030-04** | Sri Lanka Institute of Information Technology (SLIIT)
+Sri Lanka Institute of Information Technology (SLIIT)
 
 Estate Elite is a full-stack web platform for buying and selling residential properties in Sri Lanka. Sellers list properties, buyers search and reserve, agents manage viewings, finance officers handle invoices and payments, and admins maintain agencies and content moderation.
 
@@ -166,14 +166,14 @@ Register through the UI and select a role, or seed users as required for demos:
 
 ## Team
 
-| IT Number   | Name                 | Major function                          |
-|-------------|----------------------|-----------------------------------------|
-| IT25100170  | Thanthrige P.D.I.    | Agency Management                       | 
-| IT25101160  | Rukmalgoda R.D.D.    | Reviews, Ratings & Notifications        | 
-| IT25101986  | Thashmina P.G.D.     | Property Seller Module                  | 
-| IT25102047  | Palihakkara P.J.     | Payment & Transaction Module            | 
-| IT25102054  | Dinali L.D.G.N.      | Agent Viewing & Appointment Module      | 
-| IT25102115  | Malka H.A.G.         | Buyer Search & Wishlist Module          | 
+| Name                 | Major function                          |
+|----------------------|-----------------------------------------|
+| Thanthrige P.D.I.    | Agency Management                       | 
+| Rukmalgoda R.D.D.    | Reviews, Ratings & Notifications        | 
+| Thashmina P.G.D.     | Property Seller Module                  | 
+| Palihakkara P.J.     | Payment & Transaction Module            | 
+| Dinali L.D.G.N.      | Agent Viewing & Appointment Module      | 
+| Malka H.A.G.         | Buyer Search & Wishlist Module          | 
 
 ---
 
