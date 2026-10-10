@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>
+/* Apply saved theme before CSS paints — prevents flash & keeps pages consistent */
+(function(){try{var t=localStorage.getItem("ee_theme");if(t!=="light"&&t!=="dark")t="dark";document.documentElement.setAttribute("data-theme",t);}catch(e){document.documentElement.setAttribute("data-theme","dark");}})();
+</script>
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Create account - Estate Elite</title>
+<link rel="stylesheet" href="css/theme.css" />
+<script src="js/theme.js"></script>
+</head>
+<body>
+<button type="button" class="theme-toggle" id="theme-toggle" title="Toggle theme" aria-label="Toggle theme" style="position:fixed; top:18px; right:18px; z-index:100;">
+  <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+</button>
+
+<div class="auth-shell">
+  <div class="auth-card card">
+    <div class="auth-header">
+      <div class="mark">EE</div>
+      <h2>Create your account</h2>
+      <p>Choose the role that matches how you'll use Estate Elite</p>
+    </div>
+
+    <form id="register-form">
+      <div class="field">
+        <label>I am a...</label>
+        <select id="role" required>
+          <option value="BUYER">Buyer / Client - search & save properties</option>
+          <option value="SELLER">Seller / Owner - list properties</option>
+          <option value="AGENT">Agent - manage viewings</option>
+          <option value="FINANCE_OFFICER">Finance Officer - manage transactions</option>
+          <option value="ADMIN">Administrator - manage agencies & moderation</option>
+        </select>
+      </div>
+
+      <div class="field" id="agency-field" style="display:none;">
+        <label>Your agency</label>
+        <select id="agencyId"></select>
+      </div>
+
+      <div class="field" id="branch-field" style="display:none;">
+        <label>Your branch (district)</label>
+        <select id="branch"></select>
+        <div style="font-size:0.78rem; color:var(--text-muted); margin-top:4px;">You will handle properties listed in this district.</div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>Full name</label>
+          <input type="text" id="fullName" placeholder="Jane Perera" required />
+        </div>
+        <div class="field">
+          <label>Phone</label>
+          <input type="text" id="phone" placeholder="0771234567" />
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Email address</label>
+        <input type="email" id="email" placeholder="you@example.com" required />
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="password" placeholder="At least 8 characters" minlength="8" required />
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-block" id="register-btn">Create account</button>
+    </form>
+
+    <div class="divider"></div>
+    <p style="text-align:center; font-size:0.88rem;">Already have an account? <a href="login.html">Log in</a></p>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/districts.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/validate.js"></script>
+<script>
+const roleSelect = document.getElementById("role");
+const agencyField = document.getElementById("agency-field");
+const agencySelect = document.getElementById("agencyId");
+
+async function loadAgencies() {
+  try {
+    const agencies = await Api.get("/api/agencies", false);
+    agencySelect.innerHTML = agencies.map(a => `<option value="${a.id}">${Ui.escape(a.name)} (${Ui.escape(a.licenseNumber)})</option>`).join("")
+      || `<option value="">No agencies yet - ask an Admin to create one</option>`;
+  } catch (e) {
+    agencySelect.innerHTML = `<option value="">Couldn't load agencies</option>`;
+  }
+}
+
+const branchField = document.getElementById("branch-field");
+
+roleSelect.addEventListener("change", () => {
+  if (roleSelect.value === "AGENT") {
+    agencyField.style.display = "block";
+    branchField.style.display = "block";
+    loadAgencies();
+    initDistrictSelect("branch", "", { allowEmpty: true, emptyLabel: "Select your branch district…" });
+  } else {
+    agencyField.style.display = "none";
+    branchField.style.display = "none";
+  }
+});
+
+document.getElementById("register-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const nameEl = document.getElementById("fullName");
+  const phoneEl = document.getElementById("phone");
+  const emailEl = document.getElementById("email");
+  const passEl = document.getElementById("password");
+  const branchEl = document.getElementById("branch");
+  Validate.clear(nameEl, phoneEl, emailEl, passEl, agencySelect, branchEl);
+
+  if (!Validate.selectRequired(roleSelect, "a role")) return;
+  if (!Validate.required(nameEl, "Full name")) return;
+  if (!Validate.phone(phoneEl, "Phone", { optional: true })) return;
+  if (!Validate.email(emailEl)) return;
+  if (!Validate.password(passEl)) return;
+  if (roleSelect.value === "AGENT" && !Validate.selectRequired(agencySelect, "an agency")) return;
+  if (roleSelect.value === "AGENT" && !Validate.selectRequired(branchEl, "a branch district")) return;
+
+  const btn = document.getElementById("register-btn");
+  btn.disabled = true; btn.textContent = "Creating account…";
+
+  const payload = {
+    fullName: nameEl.value.trim(),
+    email: emailEl.value.trim(),
+    password: passEl.value,
+    phone: phoneEl.value.trim(),
+    role: roleSelect.value,
+  };
+  if (roleSelect.value === "AGENT") {
+    payload.agencyId = agencySelect.value ? Number(agencySelect.value) : null;
+    payload.branch = branchEl.value.trim();
+  }
+
+  try {
+    const res = await Api.post("/api/auth/register", payload, false);
+    Auth.saveSession(res);
+    Ui.toast(`Welcome to Estate Elite, ${res.fullName}!`);
+    setTimeout(() => window.location.href = Auth.dashboardFor(res.role), 400);
+  } catch (err) {
+    Ui.errorToast(err);
+    btn.disabled = false; btn.textContent = "Create account";
+  }
+});
+</script>
+</body>
+</html>

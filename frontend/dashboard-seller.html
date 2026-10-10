@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>
+/* Apply saved theme before CSS paints — prevents flash & keeps pages consistent */
+(function(){try{var t=localStorage.getItem("ee_theme");if(t!=="light"&&t!=="dark")t="dark";document.documentElement.setAttribute("data-theme",t);}catch(e){document.documentElement.setAttribute("data-theme","dark");}})();
+</script>
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Seller Dashboard - Estate Elite</title>
+<link rel="stylesheet" href="css/theme.css" />
+<script src="js/theme.js"></script>
+</head>
+<body data-nav="dashboard">
+<div id="ee-nav-mount"></div>
+
+<div class="ee-container" style="padding-top:30px; padding-bottom:60px;">
+  <div class="panel-header">
+    <div>
+      <span class="badge badge-gold">Seller / Owner Module</span>
+      <h1 style="margin-top:10px;">My Listings</h1>
+    </div>
+    <button class="btn btn-primary" id="new-listing-btn">+ Add new listing</button>
+  </div>
+
+  <div class="stat-cards" id="stat-cards"></div>
+
+  <div id="listings" class="property-grid">
+    <div class="empty-state" style="grid-column:1/-1;"><div class="glyph">⏳</div>Loading your listings…</div>
+  </div>
+</div>
+
+<!-- Create/Edit modal -->
+<div class="modal-overlay" id="listing-modal">
+  <div class="modal-box">
+    <h3 id="modal-title">Add new listing</h3>
+    <form id="listing-form">
+      <input type="hidden" id="edit-id" />
+      <div class="field"><label>Title</label><input type="text" id="title" required /></div>
+      <div class="field"><label>Description</label><textarea id="description"></textarea></div>
+      <div class="field-row">
+        <div class="field"><label>Price (LKR)</label><input type="number" id="price" required min="1" /></div>
+        <div class="field">
+          <label>District (location)</label>
+          <select id="location" required></select>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Bedrooms</label><input type="number" id="bedrooms" min="0" /></div>
+        <div class="field"><label>Bathrooms</label><input type="number" id="bathrooms" min="0" /></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Area (sqft)</label><input type="number" id="areaSqft" min="0" /></div>
+        <div class="field"><label>Parking spaces (vehicles)</label><input type="number" id="parkingSpaces" min="0" placeholder="e.g. 2" /></div>
+      </div>
+      <div class="field">
+        <label>Swimming pool</label>
+        <select id="poolAvailable">
+          <option value="false">No</option>
+          <option value="true">Yes</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Photos</label>
+        <input type="file" id="listing-photos" accept="image/*" multiple />
+        <div id="listing-photos-hint" style="font-size:0.78rem; color:var(--text-muted); margin-top:6px;">You can select multiple photos. They'll upload right after the listing is saved.</div>
+        <div class="img-thumb-row" id="listing-existing-thumbs"></div>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:16px;">
+        <button type="submit" class="btn btn-primary" style="flex:1;" id="save-btn">Save listing</button>
+        <button type="button" class="btn btn-ghost" id="cancel-btn">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Manage images modal -->
+<div class="modal-overlay" id="images-modal">
+  <div class="modal-box">
+    <h3>Manage photos</h3>
+    <input type="hidden" id="images-property-id" />
+    <input type="file" id="image-input" accept="image/*" style="margin-bottom:10px;" />
+    <button class="btn btn-primary btn-sm" id="upload-image-btn">Upload photo</button>
+    <div class="img-thumb-row" id="image-thumbs"></div>
+    <div style="margin-top:18px; text-align:right;">
+      <button class="btn btn-ghost" id="close-images-btn">Close</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/districts.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/validate.js"></script>
+<script>
+const me = Auth.guard("SELLER");
+let cache = [];
+
+function statusOptions(current) {
+  return ["AVAILABLE", "RESERVED", "SOLD"].map(s => `<option value="${s}" ${s === current ? "selected" : ""}>${s}</option>`).join("");
+}
+
+function card(p) {
+  const img = (p.images && p.images[0]) ? Api.fileUrl(p.images[0].imageUrl) : Ui.placeholderPropertyImg(p.id);
+  return `
+    <div class="property-card">
+      <div class="thumb">
+        <img src="${img}" onerror="this.src='${Ui.placeholderPropertyImg(p.id)}'"/>
+        <span class="badge ${Ui.statusBadgeClass(p.status)} status-pill">${p.status}</span>
+        <span class="price-tag">${Ui.money(p.price)}</span>
+      </div>
+      <div class="body">
+        <h3 class="title">${Ui.escape(p.title)}</h3>
+        <div class="meta">
+          <span>📍 ${Ui.escape(p.location)}</span>
+          <span>🚗 ${p.parkingSpaces ?? 0} park</span>
+          <span>${p.poolAvailable ? "🏊 Pool" : ""}</span>
+          <span>👁 ${p.viewCount} views</span>
+        </div>
+        <div class="field" style="margin:6px 0 0;">
+          <label style="margin-bottom:4px;">Status</label>
+          <select class="status-select" data-id="${p.id}">${statusOptions(p.status)}</select>
+        </div>
+        <div class="footer-row">
+          <button class="btn btn-ghost btn-sm edit-btn" data-id="${p.id}" style="flex:1;">Edit</button>
+          <button class="btn btn-ghost btn-sm photos-btn" data-id="${p.id}">📷 Photos</button>
+          <button class="btn btn-danger btn-sm delete-btn" data-id="${p.id}">Delete</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderStats() {
+  const total = cache.length;
+  const available = cache.filter(p => p.status === "AVAILABLE").length;
+  const sold = cache.filter(p => p.status === "SOLD").length;
+  const views = cache.reduce((a, p) => a + p.viewCount, 0);
+  document.getElementById("stat-cards").innerHTML = `
+    <div class="stat-card"><div class="num">${total}</div><div class="lbl">Total listings</div></div>
+    <div class="stat-card"><div class="num">${available}</div><div class="lbl">Available</div></div>
+    <div class="stat-card"><div class="num">${sold}</div><div class="lbl">Sold</div></div>
+    <div class="stat-card"><div class="num">${views}</div><div class="lbl">Total views</div></div>
+  `;
+}
+
+async function load() {
+  try {
+    cache = await Api.get("/api/properties/mine");
+    renderStats();
+    const el = document.getElementById("listings");
+    el.innerHTML = cache.length ? cache.map(card).join("") :
+      `<div class="empty-state" style="grid-column:1/-1;"><div class="glyph">🏗️</div>No listings yet - add your first property.</div>`;
+    attachHandlers();
+  } catch (err) { Ui.errorToast(err); }
+}
+
+function attachHandlers() {
+  document.querySelectorAll(".status-select").forEach(sel => sel.addEventListener("change", async () => {
+    try {
+      await Api.patch(`/api/properties/${sel.dataset.id}/status`, { status: sel.value });
+      Ui.toast("Status updated");
+      load();
+    } catch (err) { Ui.errorToast(err); }
+  }));
+
+  document.querySelectorAll(".edit-btn").forEach(btn => btn.addEventListener("click", () => openEdit(btn.dataset.id)));
+  document.querySelectorAll(".photos-btn").forEach(btn => btn.addEventListener("click", () => openImages(btn.dataset.id)));
+  document.querySelectorAll(".delete-btn").forEach(btn => btn.addEventListener("click", async () => {
+    if (!confirm("Delete this listing permanently?")) return;
+    try { await Api.del(`/api/properties/${btn.dataset.id}`); Ui.toast("Listing deleted"); load(); }
+    catch (err) { Ui.errorToast(err); }
+  }));
+}
+
+// ---- Create/Edit modal ----
+const listingModal = document.getElementById("listing-modal");
+document.getElementById("new-listing-btn").addEventListener("click", () => {
+  document.getElementById("modal-title").textContent = "Add new listing";
+  document.getElementById("listing-form").reset();
+  document.getElementById("edit-id").value = "";
+  document.getElementById("listing-existing-thumbs").innerHTML = "";
+  document.getElementById("parkingSpaces").value = "0";
+  document.getElementById("poolAvailable").value = "false";
+  initDistrictSelect("location", "", { allowEmpty: true });
+  listingModal.classList.add("open");
+});
+document.getElementById("cancel-btn").addEventListener("click", () => listingModal.classList.remove("open"));
+
+function openEdit(id) {
+  const p = cache.find(x => String(x.id) === String(id));
+  if (!p) return;
+  document.getElementById("modal-title").textContent = "Edit listing";
+  document.getElementById("edit-id").value = p.id;
+  document.getElementById("title").value = p.title;
+  document.getElementById("description").value = p.description || "";
+  document.getElementById("price").value = p.price;
+  initDistrictSelect("location", p.location || "", { allowEmpty: true });
+  document.getElementById("location").value = p.location || "";
+  document.getElementById("bedrooms").value = p.bedrooms || "";
+  document.getElementById("bathrooms").value = p.bathrooms || "";
+  document.getElementById("areaSqft").value = p.areaSqft || "";
+  document.getElementById("parkingSpaces").value = p.parkingSpaces != null ? p.parkingSpaces : 0;
+  document.getElementById("poolAvailable").value = p.poolAvailable ? "true" : "false";
+  document.getElementById("listing-photos").value = "";
+  renderExistingThumbs(p);
+  listingModal.classList.add("open");
+}
+
+function renderExistingThumbs(p) {
+  const wrap = document.getElementById("listing-existing-thumbs");
+  if (!p.images || !p.images.length) { wrap.innerHTML = ""; return; }
+  wrap.innerHTML = p.images.map(img => `
+    <div class="img-thumb">
+      <img src="${Api.fileUrl(img.imageUrl)}" />
+      <button type="button" class="remove-x" data-property="${p.id}" data-image="${img.id}">✕</button>
+    </div>
+  `).join("");
+  wrap.querySelectorAll(".remove-x").forEach(btn => btn.addEventListener("click", async () => {
+    try {
+      await Api.del(`/api/properties/${btn.dataset.property}/images/${btn.dataset.image}`);
+      cache = await Api.get("/api/properties/mine");
+      renderExistingThumbs(cache.find(x => String(x.id) === String(btn.dataset.property)));
+    } catch (err) { Ui.errorToast(err); }
+  }));
+}
+
+document.getElementById("listing-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const titleEl = document.getElementById("title");
+  const priceEl = document.getElementById("price");
+  const locEl = document.getElementById("location");
+  const bedEl = document.getElementById("bedrooms");
+  const bathEl = document.getElementById("bathrooms");
+  const areaEl = document.getElementById("areaSqft");
+  Validate.clear(titleEl, priceEl, locEl, bedEl, bathEl, areaEl);
+
+  if (!Validate.required(titleEl, "Title")) return;
+  if (!Validate.positiveNumber(priceEl, "Price")) return;
+  if (!Validate.selectRequired(locEl, "a district")) return;
+  if (!Validate.nonNegativeNumber(bedEl, "Bedrooms", { optional: true })) return;
+  if (!Validate.nonNegativeNumber(bathEl, "Bathrooms", { optional: true })) return;
+  if (!Validate.nonNegativeNumber(areaEl, "Area", { optional: true })) return;
+
+  const files = Array.from(document.getElementById("listing-photos").files || []);
+  for (const file of files) {
+    if (!Validate.imageFile(file, { optional: true })) return;
+  }
+
+  const btn = document.getElementById("save-btn");
+  btn.disabled = true; btn.textContent = "Saving…";
+  const parkEl = document.getElementById("parkingSpaces");
+  if (parkEl.value !== "" && Number(parkEl.value) < 0) {
+    Validate.fail(parkEl, "Parking spaces cannot be negative");
+    return;
+  }
+  const payload = {
+    title: titleEl.value.trim(),
+    description: document.getElementById("description").value.trim(),
+    price: Number(priceEl.value),
+    location: locEl.value.trim(),
+    bedrooms: bedEl.value ? Number(bedEl.value) : null,
+    bathrooms: bathEl.value ? Number(bathEl.value) : null,
+    areaSqft: areaEl.value ? Number(areaEl.value) : null,
+    parkingSpaces: parkEl.value !== "" ? Number(parkEl.value) : 0,
+    poolAvailable: document.getElementById("poolAvailable").value === "true",
+  };
+  const editId = document.getElementById("edit-id").value;
+
+  try {
+    let saved;
+    if (editId) saved = await Api.put(`/api/properties/${editId}`, payload);
+    else saved = await Api.post("/api/properties", payload);
+
+    if (files.length) {
+      btn.textContent = `Uploading photos (0/${files.length})…`;
+      let uploaded = 0, failed = 0;
+      for (const file of files) {
+        try {
+          await Api.upload(`/api/properties/${saved.id}/images`, file);
+          uploaded++;
+        } catch (uploadErr) {
+          failed++;
+          console.error("Photo upload failed:", file.name, uploadErr);
+        }
+        btn.textContent = `Uploading photos (${uploaded + failed}/${files.length})…`;
+      }
+      if (failed) Ui.toast(`Listing saved, but ${failed} photo${failed > 1 ? "s" : ""} failed to upload`, "error");
+      else if (uploaded) Ui.toast(`Listing saved with ${uploaded} photo${uploaded > 1 ? "s" : ""}`);
+      else Ui.toast("Listing saved");
+    } else {
+      Ui.toast("Listing saved");
+    }
+
+    listingModal.classList.remove("open");
+    load();
+  } catch (err) { Ui.errorToast(err); }
+  finally { btn.disabled = false; btn.textContent = "Save listing"; }
+});
+
+// ---- Images modal ----
+const imagesModal = document.getElementById("images-modal");
+function openImages(id) {
+  document.getElementById("images-property-id").value = id;
+  renderThumbs(id);
+  imagesModal.classList.add("open");
+}
+document.getElementById("close-images-btn").addEventListener("click", () => { imagesModal.classList.remove("open"); load(); });
+
+function renderThumbs(id) {
+  const p = cache.find(x => String(x.id) === String(id));
+  const wrap = document.getElementById("image-thumbs");
+  if (!p || !p.images.length) { wrap.innerHTML = `<p style="color:var(--text-muted); font-size:0.85rem;">No photos uploaded yet.</p>`; return; }
+  wrap.innerHTML = p.images.map(img => `
+    <div class="img-thumb">
+      <img src="${Api.fileUrl(img.imageUrl)}" />
+      <button class="remove-x" data-property="${id}" data-image="${img.id}">✕</button>
+    </div>
+  `).join("");
+  wrap.querySelectorAll(".remove-x").forEach(btn => btn.addEventListener("click", async () => {
+    try {
+      await Api.del(`/api/properties/${btn.dataset.property}/images/${btn.dataset.image}`);
+      cache = await Api.get("/api/properties/mine");
+      renderThumbs(btn.dataset.property);
+    } catch (err) { Ui.errorToast(err); }
+  }));
+}
+
+document.getElementById("upload-image-btn").addEventListener("click", async () => {
+  const id = document.getElementById("images-property-id").value;
+  const file = document.getElementById("image-input").files[0];
+  if (!Validate.imageFile(file, { optional: false })) return;
+  try {
+    await Api.upload(`/api/properties/${id}/images`, file);
+    Ui.toast("Photo uploaded");
+    cache = await Api.get("/api/properties/mine");
+    renderThumbs(id);
+    document.getElementById("image-input").value = "";
+  } catch (err) { Ui.errorToast(err); }
+});
+
+load();
+</script>
+</body>
+</html>

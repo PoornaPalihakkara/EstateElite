@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>
+/* Apply saved theme before CSS paints — prevents flash & keeps pages consistent */
+(function(){try{var t=localStorage.getItem("ee_theme");if(t!=="light"&&t!=="dark")t="dark";document.documentElement.setAttribute("data-theme",t);}catch(e){document.documentElement.setAttribute("data-theme","dark");}})();
+</script>
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Finance Dashboard - Estate Elite</title>
+<link rel="stylesheet" href="css/theme.css" />
+<script src="js/theme.js"></script>
+</head>
+<body data-nav="dashboard">
+<div id="ee-nav-mount"></div>
+
+<div class="ee-container" style="padding-top:30px; padding-bottom:60px;">
+  <div class="panel-header">
+    <div>
+      <span class="badge badge-gold">Payment & Transaction Module</span>
+      <h1 style="margin-top:10px;">Finance Dashboard</h1>
+      <p style="color:var(--text-muted); margin:6px 0 0;">Review buyer appointments &amp; reservations, then raise invoices for payment.</p>
+    </div>
+    <button class="btn btn-primary" id="new-txn-btn">+ New invoice</button>
+  </div>
+
+  <div class="stat-cards" id="stat-cards"></div>
+
+  <div class="tabs" style="display:flex; gap:8px; margin:24px 0 16px; flex-wrap:wrap;">
+    <button class="btn btn-ghost tab-btn active" data-tab="invoices">💳 Invoices</button>
+    <button class="btn btn-ghost tab-btn" data-tab="appointments">📅 Appointments</button>
+    <button class="btn btn-ghost tab-btn" data-tab="reservations">🏠 Reservations</button>
+  </div>
+
+  <div id="tab-invoices" class="tab-panel">
+    <div id="txn-list"><div class="empty-state"><div class="glyph">⏳</div>Loading transactions…</div></div>
+  </div>
+  <div id="tab-appointments" class="tab-panel" style="display:none;">
+    <div id="appt-list"><div class="empty-state"><div class="glyph">⏳</div>Loading appointments…</div></div>
+  </div>
+  <div id="tab-reservations" class="tab-panel" style="display:none;">
+    <div id="res-list"><div class="empty-state"><div class="glyph">⏳</div>Loading reservations…</div></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="txn-modal">
+  <div class="modal-box">
+    <h3 id="txn-modal-title">Generate new invoice</h3>
+    <input type="hidden" id="txn-edit-id" value="" />
+    <div class="field"><label>Property</label><select id="txn-property" required></select></div>
+    <div class="field"><label>Buyer</label><select id="txn-buyer" required></select></div>
+    <div class="field"><label>Amount (LKR)</label><input type="number" id="txn-amount" required /></div>
+    <div style="display:flex; gap:10px;">
+      <button class="btn btn-primary" style="flex:1;" id="txn-save-btn">Create invoice</button>
+      <button class="btn btn-ghost" id="txn-cancel-btn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/validate.js"></script>
+<script>
+const me = Auth.guard("FINANCE_OFFICER");
+
+let cachedTransactions = [];
+let cachedProperties = [];
+let cachedBuyers = [];
+
+// ---------------- Tabs ----------------
+document.querySelectorAll(".tab-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    document.querySelectorAll(".tab-panel").forEach(p => p.style.display = "none");
+    document.getElementById("tab-" + btn.dataset.tab).style.display = "block";
+    if (btn.dataset.tab === "appointments") loadAppointments();
+    if (btn.dataset.tab === "reservations") loadReservations();
+  });
+});
+
+function renderStats(items) {
+  const total = items.length;
+  const pending = items.filter(t => t.status === "PENDING" || t.status === "DRAFT").length;
+  const completed = items.filter(t => t.status === "COMPLETED").length;
+  const totalAmount = items.filter(t => t.status === "COMPLETED").reduce((a, t) => a + Number(t.amount), 0);
+  document.getElementById("stat-cards").innerHTML = `
+    <div class="stat-card"><div class="num">${total}</div><div class="lbl">Total invoices</div></div>
+    <div class="stat-card"><div class="num">${pending}</div><div class="lbl">Pending / draft</div></div>
+    <div class="stat-card"><div class="num">${completed}</div><div class="lbl">Completed</div></div>
+    <div class="stat-card"><div class="num">${Ui.money(totalAmount)}</div><div class="lbl">Total revenue</div></div>
+  `;
+}
+
+function statusOptions(current) {
+  return ["DRAFT", "PENDING", "COMPLETED", "REFUNDED"].map(s =>
+    `<option value="${s}" ${s === current ? "selected" : ""}>${s}</option>`
+  ).join("");
+}
+
+function apptStatusBadge(status) {
+  const map = {
+    PENDING: "badge-gold",
+    CONFIRMED: "badge-green",
+    COMPLETED: "badge-green",
+    DECLINED: "badge-rose",
+    CANCELLED: "badge-rose",
+  };
+  return `<span class="badge ${map[status] || ""}">${status}</span>`;
+}
+
+function hasOpenInvoice(propertyId, buyerId) {
+  return cachedTransactions.some(t =>
+    Number(t.propertyId) === Number(propertyId) &&
+    Number(t.buyerId) === Number(buyerId) &&
+    (t.status === "DRAFT" || t.status === "PENDING" || t.status === "COMPLETED")
+  );
+}
+
+function openCreateModal(prefill) {
+  document.getElementById("txn-edit-id").value = "";
+  document.getElementById("txn-modal-title").textContent = "Generate new invoice";
+  document.getElementById("txn-save-btn").textContent = "Create invoice";
+  if (prefill) {
+    if (prefill.propertyId != null) document.getElementById("txn-property").value = String(prefill.propertyId);
+    if (prefill.buyerId != null) document.getElementById("txn-buyer").value = String(prefill.buyerId);
+    document.getElementById("txn-amount").value = prefill.amount != null ? prefill.amount : "";
+  } else {
+    document.getElementById("txn-amount").value = "";
+  }
+  // Auto-fill amount from selected property price when empty
+  const propSel = document.getElementById("txn-property");
+  if (!document.getElementById("txn-amount").value && propSel.value) {
+    const p = cachedProperties.find(x => String(x.id) === propSel.value);
+    if (p) document.getElementById("txn-amount").value = p.price;
+  }
+  document.getElementById("txn-modal").classList.add("open");
+}
+
+function openEditModal(t) {
+  document.getElementById("txn-edit-id").value = t.id;
+  document.getElementById("txn-modal-title").textContent = "Edit invoice " + (t.invoiceNumber || "");
+  document.getElementById("txn-save-btn").textContent = "Save changes";
+  document.getElementById("txn-property").value = String(t.propertyId);
+  document.getElementById("txn-buyer").value = String(t.buyerId);
+  document.getElementById("txn-amount").value = t.amount;
+  document.getElementById("txn-modal").classList.add("open");
+}
+
+// ---------------- Invoices ----------------
+async function loadTransactions() {
+  const el = document.getElementById("txn-list");
+  try {
+    const items = await Api.get("/api/transactions");
+    cachedTransactions = items;
+    renderStats(items);
+    if (!items.length) {
+      el.innerHTML = `<div class="empty-state"><div class="glyph">💳</div>No invoices yet. Create one from an appointment or reservation.</div>`;
+      return;
+    }
+    el.innerHTML = `<div class="card"><table>
+      <thead><tr><th>Invoice #</th><th>Property</th><th>Buyer</th><th>Amount</th><th>Payment</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>${items.map(t => `
+        <tr>
+          <td>${Ui.escape(t.invoiceNumber)}</td>
+          <td>${Ui.escape(t.propertyTitle)}</td>
+          <td>${Ui.escape(t.buyerName)}</td>
+          <td>${Ui.money(t.amount)}</td>
+          <td>${t.paymentMethod ? Ui.escape(t.paymentMethod) : "—"}</td>
+          <td><select class="txn-status" data-id="${t.id}">${statusOptions(t.status)}</select></td>
+          <td style="white-space:nowrap;">
+            <button class="btn btn-ghost btn-sm txn-pdf" data-id="${t.id}" data-invoice="${Ui.escape(t.invoiceNumber || t.id)}">📄 PDF</button>
+            ${t.status !== "COMPLETED" ? `
+              <button class="btn btn-ghost btn-sm txn-edit"
+                data-id="${t.id}"
+                data-property="${t.propertyId}"
+                data-buyer="${t.buyerId}"
+                data-amount="${t.amount}"
+                data-invoice="${Ui.escape(t.invoiceNumber || "")}">Edit</button>
+              <button class="btn btn-danger btn-sm txn-del" data-id="${t.id}">Delete</button>
+            ` : ""}
+          </td>
+        </tr>
+      `).join("")}</tbody>
+    </table></div>`;
+
+    document.querySelectorAll(".txn-status").forEach(sel => sel.addEventListener("change", async () => {
+      try {
+        await Api.patch(`/api/transactions/${sel.dataset.id}/status`, { status: sel.value });
+        Ui.toast("Status updated to " + sel.value);
+        loadTransactions();
+      } catch (err) { Ui.errorToast(err); loadTransactions(); }
+    }));
+    document.querySelectorAll(".txn-pdf").forEach(btn => btn.addEventListener("click", async () => {
+      try {
+        await Api.download(`/api/transactions/${btn.dataset.id}/invoice`, `invoice-${btn.dataset.invoice}.pdf`);
+        Ui.toast("Invoice downloaded");
+      } catch (err) { Ui.errorToast(err); }
+    }));
+    document.querySelectorAll(".txn-edit").forEach(btn => btn.addEventListener("click", () => {
+      openEditModal({
+        id: btn.dataset.id,
+        propertyId: btn.dataset.property,
+        buyerId: btn.dataset.buyer,
+        amount: btn.dataset.amount,
+        invoiceNumber: btn.dataset.invoice,
+      });
+    }));
+    document.querySelectorAll(".txn-del").forEach(btn => btn.addEventListener("click", async () => {
+      if (!confirm("Delete this invoice?")) return;
+      try {
+        await Api.del(`/api/transactions/${btn.dataset.id}`);
+        Ui.toast("Invoice deleted");
+        loadTransactions();
+      } catch (err) { Ui.errorToast(err); }
+    }));
+  } catch (err) { Ui.errorToast(err); }
+}
+
+// ---------------- Appointments (for invoicing) ----------------
+async function loadAppointments() {
+  const el = document.getElementById("appt-list");
+  el.innerHTML = `<div class="empty-state"><div class="glyph">⏳</div>Loading appointments…</div>`;
+  try {
+    // Refresh invoices cache so "has invoice" flags are accurate
+    if (!cachedTransactions.length) {
+      try { cachedTransactions = await Api.get("/api/transactions"); } catch (_) {}
+    }
+    const items = await Api.get("/api/appointments/all");
+    // Prefer actionable ones first: CONFIRMED / COMPLETED / PENDING
+    const order = { CONFIRMED: 0, COMPLETED: 1, PENDING: 2, DECLINED: 3, CANCELLED: 4 };
+    items.sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
+
+    if (!items.length) {
+      el.innerHTML = `<div class="empty-state"><div class="glyph">📅</div>No viewing appointments yet.</div>`;
+      return;
+    }
+
+    el.innerHTML = `
+      <p style="color:var(--text-muted); font-size:0.88rem; margin-bottom:12px;">
+        Buyer viewing appointments. Use <strong>Create invoice</strong> to bill the buyer for the related property; they can then pay from their dashboard.
+      </p>
+      <div class="card"><table>
+        <thead>
+          <tr>
+            <th>Property</th>
+            <th>Price</th>
+            <th>Buyer</th>
+            <th>Agent</th>
+            <th>Slot</th>
+            <th>Status</th>
+            <th>Invoice</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map(a => {
+            const hasInv = hasOpenInvoice(a.propertyId, a.buyerId);
+            return `
+            <tr>
+              <td>${Ui.escape(a.propertyTitle || "—")}</td>
+              <td>${a.propertyPrice != null ? Ui.money(a.propertyPrice) : "—"}</td>
+              <td>${Ui.escape(a.buyerName || "—")}</td>
+              <td>${Ui.escape(a.agentName || "—")}</td>
+              <td>${Ui.dateTime(a.slotDateTime)}</td>
+              <td>${apptStatusBadge(a.status)}</td>
+              <td>${hasInv
+                ? `<span class="badge badge-green">Invoiced</span>`
+                : `<span class="badge badge-gold">No invoice</span>`}</td>
+              <td>
+                ${!hasInv && a.status !== "DECLINED" && a.status !== "CANCELLED" ? `
+                  <button class="btn btn-primary btn-sm create-inv-from-appt"
+                    data-property="${a.propertyId}"
+                    data-buyer="${a.buyerId}"
+                    data-amount="${a.propertyPrice != null ? a.propertyPrice : ""}">
+                    Create invoice
+                  </button>
+                ` : (hasInv ? `<span style="font-size:0.78rem; color:var(--text-muted);">Ready for buyer payment</span>` : "")}
+              </td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table></div>`;
+
+    document.querySelectorAll(".create-inv-from-appt").forEach(btn => {
+      btn.addEventListener("click", () => {
+        openCreateModal({
+          propertyId: btn.dataset.property,
+          buyerId: btn.dataset.buyer,
+          amount: btn.dataset.amount || "",
+        });
+      });
+    });
+  } catch (err) {
+    el.innerHTML = `<div class="empty-state"><div class="glyph">⚠️</div>${Ui.escape(err.message || "Could not load appointments")}</div>`;
+  }
+}
+
+// ---------------- Reservations (RESERVED properties) ----------------
+async function loadReservations() {
+  const el = document.getElementById("res-list");
+  el.innerHTML = `<div class="empty-state"><div class="glyph">⏳</div>Loading reservations…</div>`;
+  try {
+    if (!cachedTransactions.length) {
+      try { cachedTransactions = await Api.get("/api/transactions"); } catch (_) {}
+    }
+    const properties = cachedProperties.length ? cachedProperties : await Api.get("/api/properties");
+    cachedProperties = properties;
+
+    // RESERVED properties — primary reservation signal
+    const reserved = properties.filter(p => p.status === "RESERVED" || p.status === "SOLD");
+
+    // Also surface AVAILABLE properties that already have an appointment (buyer interest)
+    const appointments = await Api.get("/api/appointments/all").catch(() => []);
+    const interestedPropertyIds = new Set(
+      appointments
+        .filter(a => a.status === "CONFIRMED" || a.status === "COMPLETED" || a.status === "PENDING")
+        .map(a => a.propertyId)
+    );
+
+    // Build reservation rows: reserved/sold listings + appointments without invoices
+    const rows = [];
+
+    // Group appointments by property+buyer for reservation-like rows
+    appointments
+      .filter(a => a.status === "CONFIRMED" || a.status === "COMPLETED" || a.status === "PENDING")
+      .forEach(a => {
+        const prop = properties.find(p => Number(p.id) === Number(a.propertyId));
+        rows.push({
+          key: `appt-${a.id}`,
+          propertyId: a.propertyId,
+          propertyTitle: a.propertyTitle,
+          price: a.propertyPrice != null ? a.propertyPrice : (prop ? prop.price : null),
+          status: prop ? prop.status : "—",
+          buyerId: a.buyerId,
+          buyerName: a.buyerName,
+          source: "Appointment (" + a.status + ")",
+          slot: a.slotDateTime,
+        });
+      });
+
+    // Reserved/Sold properties that may not appear via appointment
+    reserved.forEach(p => {
+      const linked = cachedTransactions.filter(t => Number(t.propertyId) === Number(p.id));
+      if (!linked.length) {
+        rows.push({
+          key: `prop-${p.id}`,
+          propertyId: p.id,
+          propertyTitle: p.title,
+          price: p.price,
+          status: p.status,
+          buyerId: null,
+          buyerName: "— select buyer —",
+          source: "Property status: " + p.status,
+          slot: null,
+        });
+      } else {
+        linked.forEach(t => {
+          // Avoid duplicate if already from appointment with same buyer
+          if (rows.some(r => Number(r.propertyId) === Number(p.id) && Number(r.buyerId) === Number(t.buyerId))) return;
+          rows.push({
+            key: `txn-${t.id}`,
+            propertyId: p.id,
+            propertyTitle: p.title,
+            price: p.price,
+            status: p.status,
+            buyerId: t.buyerId,
+            buyerName: t.buyerName,
+            source: "Existing invoice (" + t.status + ")",
+            slot: null,
+            hasInvoice: true,
+          });
+        });
+      }
+    });
+
+    if (!rows.length) {
+      el.innerHTML = `<div class="empty-state"><div class="glyph">🏠</div>No reservations or confirmed viewings that need invoicing.</div>`;
+      return;
+    }
+
+    el.innerHTML = `
+      <p style="color:var(--text-muted); font-size:0.88rem; margin-bottom:12px;">
+        Properties that buyers have reserved or booked viewings for. Create an invoice so the buyer can pay from their dashboard.
+      </p>
+      <div class="card"><table>
+        <thead>
+          <tr>
+            <th>Property</th>
+            <th>Listing price</th>
+            <th>Property status</th>
+            <th>Buyer</th>
+            <th>Source</th>
+            <th>Invoice</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(r => {
+            const hasInv = r.hasInvoice || (r.buyerId != null && hasOpenInvoice(r.propertyId, r.buyerId));
+            return `
+            <tr>
+              <td>${Ui.escape(r.propertyTitle || "—")}</td>
+              <td>${r.price != null ? Ui.money(r.price) : "—"}</td>
+              <td><span class="badge ${r.status === "RESERVED" ? "badge-gold" : r.status === "SOLD" ? "badge-green" : ""}">${Ui.escape(String(r.status))}</span></td>
+              <td>${Ui.escape(r.buyerName || "—")}</td>
+              <td style="font-size:0.85rem;">${Ui.escape(r.source)}${r.slot ? "<br><span style='color:var(--text-muted);'>" + Ui.dateTime(r.slot) + "</span>" : ""}</td>
+              <td>${hasInv
+                ? `<span class="badge badge-green">Invoiced</span>`
+                : `<span class="badge badge-gold">Needs invoice</span>`}</td>
+              <td>
+                ${!hasInv ? `
+                  <button class="btn btn-primary btn-sm create-inv-from-res"
+                    data-property="${r.propertyId}"
+                    data-buyer="${r.buyerId != null ? r.buyerId : ""}"
+                    data-amount="${r.price != null ? r.price : ""}">
+                    Create invoice
+                  </button>
+                ` : `<span style="font-size:0.78rem; color:var(--text-muted);">Buyer can pay</span>`}
+              </td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table></div>`;
+
+    document.querySelectorAll(".create-inv-from-res").forEach(btn => {
+      btn.addEventListener("click", () => {
+        openCreateModal({
+          propertyId: btn.dataset.property,
+          buyerId: btn.dataset.buyer || undefined,
+          amount: btn.dataset.amount || "",
+        });
+      });
+    });
+  } catch (err) {
+    el.innerHTML = `<div class="empty-state"><div class="glyph">⚠️</div>${Ui.escape(err.message || "Could not load reservations")}</div>`;
+  }
+}
+
+// ---------------- Options + modal save ----------------
+async function loadOptions() {
+  try {
+    const [properties, buyerList] = await Promise.all([
+      Api.get("/api/properties"),
+      Api.get("/api/users/buyers").catch(() => []),
+    ]);
+    cachedProperties = properties;
+    cachedBuyers = buyerList;
+    document.getElementById("txn-property").innerHTML = properties.map(p =>
+      `<option value="${p.id}">${Ui.escape(p.title)} (${Ui.money(p.price)}) — ${p.status}</option>`
+    ).join("");
+    document.getElementById("txn-buyer").innerHTML = buyerList.length
+      ? buyerList.map(b => `<option value="${b.id}">${Ui.escape(b.fullName)} (${Ui.escape(b.email)})</option>`).join("")
+      : `<option value="">No buyers registered yet</option>`;
+
+    // When property changes, suggest listing price
+    document.getElementById("txn-property").addEventListener("change", () => {
+      const p = cachedProperties.find(x => String(x.id) === document.getElementById("txn-property").value);
+      if (p) document.getElementById("txn-amount").value = p.price;
+    });
+  } catch (e) { /* silent */ }
+}
+
+const txnModal = document.getElementById("txn-modal");
+document.getElementById("new-txn-btn").addEventListener("click", () => openCreateModal());
+document.getElementById("txn-cancel-btn").addEventListener("click", () => txnModal.classList.remove("open"));
+document.getElementById("txn-save-btn").addEventListener("click", async () => {
+  const propEl = document.getElementById("txn-property");
+  const buyerEl = document.getElementById("txn-buyer");
+  const amountEl = document.getElementById("txn-amount");
+  Validate.clear(propEl, buyerEl, amountEl);
+
+  if (!Validate.selectRequired(propEl, "a property")) return;
+  if (!Validate.selectRequired(buyerEl, "a buyer")) return;
+  if (!Validate.positiveNumber(amountEl, "Amount")) return;
+
+  const editId = document.getElementById("txn-edit-id").value;
+  const body = {
+    propertyId: Number(propEl.value),
+    buyerId: Number(buyerEl.value),
+    amount: Number(amountEl.value),
+  };
+  try {
+    if (editId) {
+      await Api.put(`/api/transactions/${editId}`, body);
+      Ui.toast("Invoice updated");
+    } else {
+      await Api.post("/api/transactions", body);
+      Ui.toast("Invoice created — buyer can pay from their dashboard");
+    }
+    txnModal.classList.remove("open");
+    await loadTransactions();
+    // Refresh other tabs if visible
+    const active = document.querySelector(".tab-btn.active");
+    if (active && active.dataset.tab === "appointments") loadAppointments();
+    if (active && active.dataset.tab === "reservations") loadReservations();
+  } catch (err) { Ui.errorToast(err); }
+});
+
+loadOptions();
+loadTransactions();
+</script>
+</body>
+</html>

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>
+/* Apply saved theme before CSS paints — prevents flash & keeps pages consistent */
+(function(){try{var t=localStorage.getItem("ee_theme");if(t!=="light"&&t!=="dark")t="dark";document.documentElement.setAttribute("data-theme",t);}catch(e){document.documentElement.setAttribute("data-theme","dark");}})();
+</script>
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>My Profile - Estate Elite</title>
+<link rel="stylesheet" href="css/theme.css" />
+<script src="js/theme.js"></script>
+</head>
+<body>
+<div id="ee-nav-mount"></div>
+
+<div class="ee-container" style="max-width:640px; padding-top:36px; padding-bottom:60px;">
+  <h1>My Account</h1>
+  <p>Update your personal details and profile photo.</p>
+
+  <div class="card">
+    <div style="display:flex; align-items:center; gap:16px; margin-bottom:22px;">
+      <div class="avatar" id="avatar-preview" style="width:64px;height:64px;font-size:1.4rem;"></div>
+      <div>
+        <input type="file" id="photo-input" accept="image/*" style="display:none;" />
+        <button class="btn btn-ghost btn-sm" id="photo-btn">Change photo</button>
+      </div>
+    </div>
+
+    <form id="profile-form">
+      <div class="field"><label>Full name</label><input type="text" id="fullName" required /></div>
+      <div class="field"><label>Phone</label><input type="text" id="phone" /></div>
+      <div class="field"><label>Email</label><input type="email" id="email" disabled /></div>
+      <div class="field"><label>Role</label><input type="text" id="role" disabled /></div>
+      <div class="field" id="branch-field" style="display:none;">
+        <label>Branch district</label>
+        <select id="branch"></select>
+        <div style="font-size:0.78rem; color:var(--text-muted); margin-top:4px;">Properties in this district can be assigned to you for viewings.</div>
+      </div>
+      <button type="submit" class="btn btn-primary" id="save-btn">Save changes</button>
+    </form>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/districts.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/validate.js"></script>
+<script>
+const me = Auth.guard();
+
+async function load() {
+  const profile = await Api.get("/api/users/me");
+  document.getElementById("fullName").value = profile.fullName;
+  document.getElementById("phone").value = profile.phone || "";
+  document.getElementById("email").value = profile.email;
+  document.getElementById("role").value = Auth.roleLabel(profile.role);
+  const branchField = document.getElementById("branch-field");
+  if (profile.role === "AGENT") {
+    branchField.style.display = "block";
+    initDistrictSelect("branch", profile.branch || "", { allowEmpty: false });
+    if (profile.branch) document.getElementById("branch").value = profile.branch;
+  } else {
+    branchField.style.display = "none";
+  }
+  const avatar = document.getElementById("avatar-preview");
+  if (profile.profileImage) {
+    avatar.innerHTML = `<img src="${Api.fileUrl(profile.profileImage)}" />`;
+  } else {
+    avatar.textContent = profile.fullName.charAt(0).toUpperCase();
+  }
+}
+
+document.getElementById("photo-btn").addEventListener("click", () => document.getElementById("photo-input").click());
+document.getElementById("photo-input").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (!Validate.imageFile(file, { optional: false })) return;
+  try {
+    await Api.upload("/api/users/me/photo", file);
+    Ui.toast("Profile photo updated");
+    load();
+  } catch (err) { Ui.errorToast(err); }
+});
+
+document.getElementById("profile-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const nameEl = document.getElementById("fullName");
+  const phoneEl = document.getElementById("phone");
+  Validate.clear(nameEl, phoneEl);
+  if (!Validate.required(nameEl, "Full name")) return;
+  if (!Validate.phone(phoneEl, "Phone", { optional: true })) return;
+
+  const btn = document.getElementById("save-btn");
+  btn.disabled = true; btn.textContent = "Saving…";
+  try {
+    const body = {
+      fullName: nameEl.value.trim(),
+      phone: phoneEl.value.trim(),
+    };
+    const branchEl = document.getElementById("branch");
+    if (me.role === "AGENT" || Auth.currentUser()?.role === "AGENT") {
+      if (!Validate.selectRequired(branchEl, "a branch district")) {
+        btn.disabled = false; btn.textContent = "Save changes";
+        return;
+      }
+      body.branch = branchEl.value.trim();
+    }
+    await Api.put("/api/users/me", body);
+    const user = Auth.currentUser();
+    user.fullName = nameEl.value.trim();
+    localStorage.setItem("ee_user", JSON.stringify(user));
+    Ui.toast("Profile updated");
+  } catch (err) { Ui.errorToast(err); }
+  finally { btn.disabled = false; btn.textContent = "Save changes"; }
+});
+
+load();
+</script>
+</body>
+</html>

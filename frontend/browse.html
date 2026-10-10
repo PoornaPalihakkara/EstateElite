@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>
+/* Apply saved theme before CSS paints — prevents flash & keeps pages consistent */
+(function(){try{var t=localStorage.getItem("ee_theme");if(t!=="light"&&t!=="dark")t="dark";document.documentElement.setAttribute("data-theme",t);}catch(e){document.documentElement.setAttribute("data-theme","dark");}})();
+</script>
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Browse Properties - Estate Elite</title>
+<link rel="stylesheet" href="css/theme.css" />
+<script src="js/theme.js"></script>
+</head>
+<body data-nav="browse">
+<div id="ee-nav-mount"></div>
+
+<div class="ee-container" style="padding-top:30px; padding-bottom:60px;">
+  <div class="panel-header">
+    <div>
+      <span class="badge badge-gold">Advanced Search</span>
+      <h1 style="margin-top:10px;">Find your next property</h1>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:26px;">
+    <form id="search-form" class="field-row" style="grid-template-columns: 2fr 1fr 1fr 1fr auto; align-items:end; gap:14px;">
+      <div class="field" style="margin-bottom:0;">
+        <label>District</label>
+        <select id="f-location"></select>
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label>Min price (LKR)</label>
+        <input type="number" id="f-minPrice" placeholder="0" />
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label>Max price (LKR)</label>
+        <input type="number" id="f-maxPrice" placeholder="Any" />
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label>Min bedrooms</label>
+        <input type="number" id="f-bedrooms" placeholder="Any" />
+      </div>
+      <button type="submit" class="btn btn-primary">Search</button>
+    </form>
+    <div id="recent-searches" style="margin-top:14px; display:none;">
+      <span style="font-size:0.78rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em;">Recent searches:</span>
+      <span id="recent-list" style="font-size:0.85rem; color:var(--gold-300);"></span>
+    </div>
+  </div>
+
+  <div id="results" class="property-grid">
+    <div class="empty-state" style="grid-column:1/-1;"><div class="glyph">⏳</div>Loading properties…</div>
+  </div>
+</div>
+
+<div class="footer">Estate Elite · SE2030 Software Engineering Group Project</div>
+
+<script src="js/api.js"></script>
+<script src="js/districts.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/validate.js"></script>
+<script>
+const resultsEl = document.getElementById("results");
+initDistrictSelect("f-location", "", { allowEmpty: true, emptyLabel: "Any district" });
+const user = Auth.currentUser();
+
+function propertyCard(p) {
+  const img = (p.images && p.images[0]) ? Api.fileUrl(p.images[0].imageUrl) : Ui.placeholderPropertyImg(p.id);
+  return `
+    <div class="property-card">
+      <a href="property.html?id=${p.id}" class="thumb">
+        <img src="${img}" alt="${Ui.escape(p.title)}" onerror="this.src='${Ui.placeholderPropertyImg(p.id)}'"/>
+        <span class="badge ${Ui.statusBadgeClass(p.status)} status-pill">${p.status}</span>
+        <span class="price-tag">${Ui.money(p.price)}</span>
+      </a>
+      <div class="body">
+        <h3 class="title"><a href="property.html?id=${p.id}" style="color:inherit;">${Ui.escape(p.title)}</a></h3>
+        <div class="meta">
+          <span>📍 ${Ui.escape(p.location)}</span>
+          <span>🛏 ${p.bedrooms ?? "-"}</span>
+          <span>🚗 ${p.parkingSpaces ?? 0}</span>
+          <span>${p.poolAvailable ? "🏊" : ""}</span>
+          <span>🛁 ${p.bathrooms ?? "-"}</span>
+        </div>
+        <div class="meta"><span>📐 ${p.areaSqft ?? "-"} sqft</span><span>👁 ${p.viewCount} views</span></div>
+        <div class="footer-row">
+          <a href="property.html?id=${p.id}" class="btn btn-ghost btn-sm" style="flex:1;">View details</a>
+          ${user && user.role === "BUYER" ? `<button class="btn btn-primary btn-sm wishlist-btn" data-id="${p.id}">♡ Save</button>` : ""}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function render(list) {
+  if (!list.length) {
+    resultsEl.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><div class="glyph">🏚️</div>No properties matched your search.</div>`;
+    return;
+  }
+  resultsEl.innerHTML = list.map(propertyCard).join("");
+  document.querySelectorAll(".wishlist-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      try {
+        await Api.post("/api/wishlist", { propertyId: Number(btn.dataset.id), priority: "MEDIUM" });
+        Ui.toast("Added to wishlist ♡");
+      } catch (err) { Ui.errorToast(err); }
+    });
+  });
+}
+
+async function runSearch() {
+  const minEl = document.getElementById("f-minPrice");
+  const maxEl = document.getElementById("f-maxPrice");
+  const bedEl = document.getElementById("f-bedrooms");
+  Validate.clear(minEl, maxEl, bedEl);
+
+  if (!Validate.nonNegativeNumber(minEl, "Min price", { optional: true })) return;
+  if (!Validate.nonNegativeNumber(maxEl, "Max price", { optional: true })) return;
+  if (!Validate.rangeOrder(minEl, maxEl, "Price range")) return;
+  if (!Validate.nonNegativeNumber(bedEl, "Bedrooms", { optional: true })) return;
+
+  const location = document.getElementById("f-location").value.trim();
+  const minPrice = minEl.value;
+  const maxPrice = maxEl.value;
+  const bedrooms = bedEl.value;
+
+  const params = new URLSearchParams();
+  if (location) params.set("location", location);
+  if (minPrice) params.set("minPrice", minPrice);
+  if (maxPrice) params.set("maxPrice", maxPrice);
+  if (bedrooms) params.set("minBedrooms", bedrooms);
+
+  resultsEl.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><div class="glyph">⏳</div>Searching…</div>`;
+  try {
+    const list = await Api.get("/api/properties/search?" + params.toString(), Auth.isLoggedIn());
+    render(list);
+    if (user && user.role === "BUYER") loadRecentSearches();
+  } catch (err) { Ui.errorToast(err); }
+}
+
+async function loadRecentSearches() {
+  try {
+    const recent = await Api.get("/api/search-history");
+    if (recent.length) {
+      document.getElementById("recent-searches").style.display = "block";
+      document.getElementById("recent-list").textContent = recent.join("  •  ");
+    }
+  } catch (e) { /* silent */ }
+}
+
+document.getElementById("search-form").addEventListener("submit", (e) => { e.preventDefault(); runSearch(); });
+
+runSearch();
+if (user && user.role === "BUYER") loadRecentSearches();
+</script>
+</body>
+</html>

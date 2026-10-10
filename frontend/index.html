@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>
+/* Apply saved theme before CSS paints — prevents flash & keeps pages consistent */
+(function(){try{var t=localStorage.getItem("ee_theme");if(t!=="light"&&t!=="dark")t="dark";document.documentElement.setAttribute("data-theme",t);}catch(e){document.documentElement.setAttribute("data-theme","dark");}})();
+</script>
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Estate Elite - Real Estate, Elevated</title>
+<link rel="stylesheet" href="css/theme.css" />
+<script src="js/theme.js"></script>
+</head>
+<body data-nav="home">
+<div id="ee-nav-mount"></div>
+
+<div class="ee-shell">
+  <section class="hero">
+    <div class="hero-inner">
+      <div>
+        <span class="badge badge-gold">SE2030 · Software Engineering Group Project</span>
+        <h1 style="margin-top:14px;">The centralised ledger for modern property transactions.</h1>
+        <p class="lede">Estate Elite brings sellers, buyers, agents, agencies and finance teams onto one platform - from first listing to final receipt - replacing scattered spreadsheets with one clean, transparent portal.</p>
+        <div class="hero-actions">
+          <a href="register.html" class="btn btn-primary">Create your account</a>
+          <a href="browse.html" class="btn btn-ghost">Browse properties</a>
+        </div>
+        <div class="stat-strip">
+          <div class="stat"><b>5</b><span>Stakeholder roles</span></div>
+          <div class="stat"><b>6</b><span>Core modules</span></div>
+          <div class="stat"><b>1</b><span>Unified portal</span></div>
+        </div>
+      </div>
+      <div class="hero-img-wrap">
+        <img src="assets/Hero Page Image.jpg" alt="Agent showing luxury property to buyers" style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;">
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="how-it-works">
+    <div class="ee-container">
+      <div class="section-head">
+        <span class="badge badge-blue">How it works</span>
+        <h2 style="margin-top:12px;">One portal, five roles, zero spreadsheets.</h2>
+        <p>Every stakeholder in a property transaction gets a purpose-built dashboard.</p>
+      </div>
+      <div class="role-grid">
+        <div class="role-card">
+          <div class="role-tab">SE</div>
+          <h3 style="font-size:1.05rem;">Sellers</h3>
+          <p>List properties with photos, manage availability, and track listing performance.</p>
+        </div>
+        <div class="role-card">
+          <div class="role-tab">BU</div>
+          <h3 style="font-size:1.05rem;">Buyers</h3>
+          <p>Search with advanced filters, save favourites to a wishlist, and book viewings.</p>
+        </div>
+        <div class="role-card">
+          <div class="role-tab">AG</div>
+          <h3 style="font-size:1.05rem;">Agents</h3>
+          <p>Publish availability, confirm or decline viewing requests, avoid double-bookings.</p>
+        </div>
+        <div class="role-card">
+          <div class="role-tab">AD</div>
+          <h3 style="font-size:1.05rem;">Admins</h3>
+          <p>Maintain the verified agency directory and moderate flagged reviews.</p>
+        </div>
+        <div class="role-card">
+          <div class="role-tab">FO</div>
+          <h3 style="font-size:1.05rem;">Finance officers</h3>
+          <p>Track reservation deposits, generate invoices, and export PDF receipts.</p>
+        </div>
+        <div class="role-card">
+          <div class="role-tab">ALL</div>
+          <h3 style="font-size:1.05rem;">Everyone</h3>
+          <p>Real-time in-app notifications keep every role in the loop automatically.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" style="padding-top:0;">
+    <div class="ee-container card" style="text-align:center; padding:44px;">
+      <h2>Ready to explore Estate Elite?</h2>
+      <p style="max-width:520px; margin:0 auto 20px;">Register for a role-specific account, or log in to access your personalized dashboard.</p>
+      <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+        <a href="register.html" class="btn btn-primary">Create account</a>
+        <a href="login.html" class="btn btn-ghost">I already have one</a>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    Estate Elite · SE2030 Software Engineering Group Project
+  </footer>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>

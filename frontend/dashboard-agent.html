@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>
+/* Apply saved theme before CSS paints — prevents flash & keeps pages consistent */
+(function(){try{var t=localStorage.getItem("ee_theme");if(t!=="light"&&t!=="dark")t="dark";document.documentElement.setAttribute("data-theme",t);}catch(e){document.documentElement.setAttribute("data-theme","dark");}})();
+</script>
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Agent Dashboard - Estate Elite</title>
+<link rel="stylesheet" href="css/theme.css" />
+<script src="js/theme.js"></script>
+</head>
+<body data-nav="dashboard">
+<div id="ee-nav-mount"></div>
+
+<div class="ee-container" style="padding-top:30px; padding-bottom:60px;">
+  <span class="badge badge-gold">Agent Viewing & Appointment Module</span>
+  <h1 style="margin-top:10px;">Agent Dashboard</h1>
+
+  <div class="tab-bar">
+    <div class="tab-btn active" data-tab="appointments">📋 Appointments</div>
+    <div class="tab-btn" data-tab="slots">➕ Availability</div>
+  </div>
+
+  <div id="tab-appointments" class="tab-panel"></div>
+
+  <div id="tab-slots" class="tab-panel" style="display:none;">
+    <div class="card" style="max-width:460px; margin-bottom:24px;">
+      <h3 style="margin-top:0;">Add an available viewing slot</h3>
+      <form id="slot-form">
+        <input type="hidden" id="slot-edit-id" value="" />
+        <div class="field"><label>Date & time</label><input type="datetime-local" id="slot-datetime" required /></div>
+        <div class="field"><label>Property (optional)</label><select id="slot-property"><option value="">Not tied to a specific property</option></select></div>
+        <div style="display:flex; gap:10px;">
+          <button type="submit" class="btn btn-primary" style="flex:1;" id="slot-submit-btn">Add slot</button>
+          <button type="button" class="btn btn-ghost" id="slot-cancel-edit" style="display:none;">Cancel edit</button>
+        </div>
+      </form>
+    </div>
+    <div id="slots-list"></div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/validate.js"></script>
+<script>
+const me = Auth.guard("AGENT");
+
+function setSlotMin() {
+  const el = document.getElementById("slot-datetime");
+  if (!el) return;
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  el.min = now.toISOString().slice(0, 16);
+}
+setSlotMin();
+
+
+document.querySelectorAll(".tab-btn").forEach(btn => btn.addEventListener("click", () => {
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".tab-panel").forEach(p => p.style.display = "none");
+  btn.classList.add("active");
+  document.getElementById("tab-" + btn.dataset.tab).style.display = "block";
+  loaders[btn.dataset.tab]();
+}));
+
+async function loadAppointments() {
+  const el = document.getElementById("tab-appointments");
+  el.innerHTML = `<div class="empty-state"><div class="glyph">⏳</div>Loading…</div>`;
+  try {
+    const items = await Api.get("/api/appointments/agent");
+    if (!items.length) { el.innerHTML = `<div class="empty-state"><div class="glyph">📋</div>No appointment requests yet.</div>`; return; }
+    el.innerHTML = `<div class="card"><table>
+      <thead><tr><th>Property</th><th>Buyer</th><th>Date & time</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>${items.map(a => `
+        <tr>
+          <td><a href="property.html?id=${a.propertyId}">${Ui.escape(a.propertyTitle)}</a></td>
+          <td>${Ui.escape(a.buyerName)}</td>
+          <td>${Ui.dateTime(a.slotDateTime)}</td>
+          <td><span class="badge ${Ui.statusBadgeClass(a.status)}">${a.status}</span></td>
+          <td>
+            ${a.status === "PENDING" ? `
+              <button class="btn btn-primary btn-sm confirm-btn" data-id="${a.id}">Confirm</button>
+              <button class="btn btn-danger btn-sm decline-btn" data-id="${a.id}">Decline</button>
+            ` : a.status === "CONFIRMED" ? `<button class="btn btn-ghost btn-sm complete-btn" data-id="${a.id}">Mark completed</button>` :
+              `<button class="btn btn-ghost btn-sm delete-appt" data-id="${a.id}">Delete</button>`}
+          </td>
+        </tr>
+      `).join("")}</tbody>
+    </table></div>`;
+
+    document.querySelectorAll(".confirm-btn").forEach(b => b.addEventListener("click", () => setStatus(b.dataset.id, "CONFIRMED")));
+    document.querySelectorAll(".decline-btn").forEach(b => b.addEventListener("click", () => setStatus(b.dataset.id, "DECLINED")));
+    document.querySelectorAll(".complete-btn").forEach(b => b.addEventListener("click", () => setStatus(b.dataset.id, "COMPLETED")));
+    document.querySelectorAll(".delete-appt").forEach(b => b.addEventListener("click", async () => {
+      if (!confirm("Permanently delete this appointment record?")) return;
+      try { await Api.del(`/api/appointments/${b.dataset.id}`); Ui.toast("Appointment deleted"); loadAppointments(); }
+      catch (err) { Ui.errorToast(err); }
+    }));
+  } catch (err) { Ui.errorToast(err); }
+}
+
+async function setStatus(id, status) {
+  try {
+    await Api.patch(`/api/appointments/${id}/status`, { status });
+    Ui.toast(`Appointment ${status.toLowerCase()}`);
+    loadAppointments();
+  } catch (err) { Ui.errorToast(err); }
+}
+
+async function loadPropertyOptions() {
+  try {
+    const properties = await Api.get("/api/properties");
+    document.getElementById("slot-property").innerHTML += properties.map(p => `<option value="${p.id}">${Ui.escape(p.title)}</option>`).join("");
+  } catch (e) { /* silent */ }
+}
+
+async function loadSlots() {
+  const el = document.getElementById("slots-list");
+  el.innerHTML = `<div class="empty-state"><div class="glyph">⏳</div>Loading…</div>`;
+  try {
+    const slots = await Api.get(`/api/appointments/slots/${me.id}`);
+    if (!slots.length) { el.innerHTML = `<div class="empty-state"><div class="glyph">🗓️</div>No open slots - add one above.</div>`; return; }
+    el.innerHTML = `<div class="card"><table>
+      <thead><tr><th>Date & time</th><th>Property</th><th>Status</th><th></th></tr></thead>
+      <tbody>${slots.map(s => `
+        <tr>
+          <td>${Ui.dateTime(s.slotDateTime)}</td>
+          <td>${s.propertyTitle ? Ui.escape(s.propertyTitle) : "Any"}</td>
+          <td><span class="badge ${s.isBooked ? "badge-gray" : "badge-green"}">${s.isBooked ? "Booked" : "Open"}</span></td>
+          <td style="white-space:nowrap;">
+            ${!s.isBooked ? `
+              <button class="btn btn-ghost btn-sm slot-edit"
+                data-id="${s.id}"
+                data-dt="${Ui.escape(s.slotDateTime)}"
+                data-property="${s.propertyId != null ? s.propertyId : ""}">Edit</button>
+              <button class="btn btn-danger btn-sm slot-delete" data-id="${s.id}">Delete</button>
+            ` : `<span style="font-size:0.78rem;color:var(--text-muted);">Locked</span>`}
+          </td>
+        </tr>
+      `).join("")}</tbody>
+    </table></div>`;
+
+    document.querySelectorAll(".slot-edit").forEach(btn => btn.addEventListener("click", () => {
+      setSlotMin();
+      document.getElementById("slot-edit-id").value = btn.dataset.id;
+      // Convert ISO to datetime-local value
+      const raw = btn.dataset.dt;
+      const d = new Date(raw);
+      if (!Number.isNaN(d.getTime())) {
+        const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+        document.getElementById("slot-datetime").value = local.toISOString().slice(0, 16);
+      }
+      document.getElementById("slot-property").value = btn.dataset.property || "";
+      document.getElementById("slot-submit-btn").textContent = "Update slot";
+      document.getElementById("slot-cancel-edit").style.display = "inline-block";
+      document.getElementById("slot-datetime").scrollIntoView({ behavior: "smooth", block: "center" });
+    }));
+
+    document.querySelectorAll(".slot-delete").forEach(btn => btn.addEventListener("click", async () => {
+      if (!confirm("Delete this availability slot?")) return;
+      try {
+        await Api.del(`/api/appointments/slots/${btn.dataset.id}`);
+        Ui.toast("Slot deleted");
+        loadSlots();
+      } catch (err) { Ui.errorToast(err); }
+    }));
+  } catch (err) { Ui.errorToast(err); }
+}
+
+function resetSlotForm() {
+  document.getElementById("slot-edit-id").value = "";
+  document.getElementById("slot-form").reset();
+  document.getElementById("slot-submit-btn").textContent = "Add slot";
+  document.getElementById("slot-cancel-edit").style.display = "none";
+  setSlotMin();
+}
+
+document.getElementById("slot-cancel-edit").addEventListener("click", resetSlotForm);
+
+document.getElementById("slot-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  setSlotMin();
+  const dtEl = document.getElementById("slot-datetime");
+  Validate.clear(dtEl);
+  if (!Validate.futureDateTime(dtEl, "Date & time")) return;
+  const editId = document.getElementById("slot-edit-id").value;
+  const body = {
+    slotDateTime: dtEl.value,
+    propertyId: document.getElementById("slot-property").value
+      ? Number(document.getElementById("slot-property").value)
+      : null,
+  };
+  try {
+    if (editId) {
+      await Api.put(`/api/appointments/slots/${editId}`, body);
+      Ui.toast("Slot updated");
+    } else {
+      await Api.post("/api/appointments/slots", body);
+      Ui.toast("Slot added");
+    }
+    resetSlotForm();
+    loadSlots();
+  } catch (err) { Ui.errorToast(err); }
+});
+
+const loaders = { appointments: loadAppointments, slots: loadSlots };
+loadAppointments();
+loadPropertyOptions();
+</script>
+</body>
+</html>

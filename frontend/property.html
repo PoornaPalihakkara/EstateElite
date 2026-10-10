@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>
+/* Apply saved theme before CSS paints — prevents flash & keeps pages consistent */
+(function(){try{var t=localStorage.getItem("ee_theme");if(t!=="light"&&t!=="dark")t="dark";document.documentElement.setAttribute("data-theme",t);}catch(e){document.documentElement.setAttribute("data-theme","dark");}})();
+</script>
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Property - Estate Elite</title>
+<link rel="stylesheet" href="css/theme.css" />
+<script src="js/theme.js"></script>
+</head>
+<body data-nav="browse">
+<div id="ee-nav-mount"></div>
+
+<div class="ee-container" style="padding-top:30px; padding-bottom:60px;" id="content">
+  <div class="empty-state"><div class="glyph">⏳</div>Loading property…</div>
+</div>
+
+<div class="modal-overlay" id="rev-edit-modal">
+  <div class="modal-box">
+    <h3>Edit review</h3>
+    <input type="hidden" id="rev-edit-id" />
+    <div class="field"><label>Rating</label>
+      <select id="rev-edit-rating">
+        <option value="5">★★★★★ (5)</option>
+        <option value="4">★★★★☆ (4)</option>
+        <option value="3">★★★☆☆ (3)</option>
+        <option value="2">★★☆☆☆ (2)</option>
+        <option value="1">★☆☆☆☆ (1)</option>
+      </select>
+    </div>
+    <div class="field"><label>Comment</label><textarea id="rev-edit-comment" rows="4"></textarea></div>
+    <div style="display:flex; gap:10px;">
+      <button class="btn btn-primary" style="flex:1;" id="rev-edit-save">Save</button>
+      <button class="btn btn-ghost" id="rev-edit-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Flag review with note -->
+<div class="modal-overlay" id="flag-review-modal">
+  <div class="modal-box" style="max-width:420px;">
+    <h3 style="margin-top:0;">Flag review</h3>
+    <p style="color:var(--text-muted); font-size:0.88rem;">Explain why this review is inappropriate. Admins will review your note.</p>
+    <input type="hidden" id="flag-review-id" />
+    <div class="field"><label>Reason / note</label>
+      <textarea id="flag-review-note" rows="3" placeholder="e.g. Contains offensive language / spam / false claims…"></textarea>
+    </div>
+    <div style="display:flex; gap:10px;">
+      <button class="btn btn-primary" style="flex:1;" id="flag-review-submit">Submit flag</button>
+      <button class="btn btn-ghost" id="flag-review-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Report agent with note -->
+<div class="modal-overlay" id="report-agent-modal">
+  <div class="modal-box" style="max-width:420px;">
+    <h3 style="margin-top:0;">Report agent</h3>
+    <p style="color:var(--text-muted); font-size:0.88rem;" id="report-agent-label">Describe the issue. An administrator will review this report.</p>
+    <input type="hidden" id="report-agent-id" />
+    <div class="field"><label>Reason / note</label>
+      <textarea id="report-agent-note" rows="3" placeholder="e.g. Unprofessional behaviour / no-show / harassment…"></textarea>
+    </div>
+    <div style="display:flex; gap:10px;">
+      <button class="btn btn-primary" style="flex:1;" id="report-agent-submit">Submit report</button>
+      <button class="btn btn-ghost" id="report-agent-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reserve property with payment modal -->
+<div class="modal-overlay" id="reserve-modal">
+  <div class="modal-box">
+    <h3 style="margin-top:0;">Reserve property</h3>
+    <p style="font-size:0.85rem; color:var(--text-muted); margin-top:0;">
+      Pay by card or bank transfer to lock this listing.
+    </p>
+    <input type="hidden" id="reserve-property-id" />
+    <div class="field"><label>Amount (LKR)</label>
+      <input type="number" id="reserve-amount" min="1" step="0.01" />
+      <div id="reserve-price-hint" style="font-size:0.78rem; color:var(--text-muted); margin-top:4px;"></div>
+    </div>
+
+    <div class="field">
+      <label>Payment method</label>
+      <div style="display:flex; gap:14px; flex-wrap:wrap;">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; text-transform:none; font-weight:600; letter-spacing:0; opacity:1;">
+          <input type="radio" name="reserve-method" id="reserve-method-card" value="CARD" checked /> Card
+        </label>
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; text-transform:none; font-weight:600; letter-spacing:0; opacity:1;">
+          <input type="radio" name="reserve-method" id="reserve-method-bank" value="BANK_TRANSFER" /> Bank transfer
+        </label>
+      </div>
+    </div>
+
+    <div id="reserve-card-fields">
+      <div class="field"><label>Cardholder name</label><input type="text" id="reserve-name" placeholder="Jane Perera" autocomplete="cc-name" /></div>
+      <div class="field"><label>Card number</label><input type="text" id="reserve-card" placeholder="4242 4242 4242 4242" inputmode="numeric" autocomplete="cc-number" /></div>
+      <div class="field-row">
+        <div class="field"><label>Expiry (MM/YY)</label><input type="text" id="reserve-expiry" placeholder="12/28" autocomplete="cc-exp" /></div>
+        <div class="field"><label>CVV</label><input type="text" id="reserve-cvv" placeholder="123" inputmode="numeric" autocomplete="cc-csc" /></div>
+      </div>
+    </div>
+
+    <div id="reserve-bank-fields" style="display:none;">
+      <p style="font-size:0.88rem; color:var(--text-muted); margin:0 0 12px;">
+        Transfer the amount, then upload a photo of your receipt. Finance will verify the payment.
+      </p>
+      <div class="field"><label>Transfer reference (optional)</label>
+        <input type="text" id="reserve-bank-ref" placeholder="e.g. bank ref / slip number" />
+      </div>
+      <div class="field"><label>Receipt photo</label>
+        <input type="file" id="reserve-receipt" accept="image/*" />
+      </div>
+    </div>
+
+    <div style="display:flex; gap:10px;">
+      <button class="btn btn-primary" style="flex:1;" id="reserve-submit-btn">Pay &amp; Reserve</button>
+      <button class="btn btn-ghost" id="reserve-cancel-btn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/validate.js"></script>
+<script>
+const params = new URLSearchParams(window.location.search);
+const propertyId = params.get("id");
+const user = Auth.currentUser();
+const content = document.getElementById("content");
+
+async function load() {
+  try {
+    const [property, reviews] = await Promise.all([
+      Api.get(`/api/properties/${propertyId}`, Auth.isLoggedIn()),
+      Api.get(`/api/reviews/property/${propertyId}`, false),
+    ]);
+    render(property, reviews);
+  } catch (err) {
+    content.innerHTML = `<div class="empty-state"><div class="glyph">⚠️</div>${Ui.escape(err.message)}</div>`;
+  }
+}
+
+function render(p, reviews) {
+  const images = (p.images && p.images.length) ? p.images.map(i => Api.fileUrl(i.imageUrl)) : [Ui.placeholderPropertyImg(p.id)];
+  const avgRating = reviews.length ? (reviews.reduce((a, r) => a + r.rating, 0) / reviews.length).toFixed(1) : null;
+
+  content.innerHTML = `
+    <a href="browse.html" style="font-size:0.85rem;">&larr; Back to search</a>
+    <div style="display:grid; grid-template-columns: 1.4fr 1fr; gap:28px; margin-top:16px; align-items:start;">
+      <div>
+        <div class="card" style="padding:0; overflow:hidden;">
+          <img id="hero-img" src="${images[0]}" style="width:100%; height:380px; object-fit:cover; display:block;" onerror="this.src='${Ui.placeholderPropertyImg(p.id)}'"/>
+          <div style="display:flex; gap:8px; padding:12px; flex-wrap:wrap;">
+            ${images.map((src, i) => `<img src="${src}" data-src="${src}" class="thumb-select" style="width:70px;height:56px;object-fit:cover;border-radius:8px;cursor:pointer;border:1px solid var(--border-subtle);" onerror="this.style.display='none'"/>`).join("")}
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:20px;">
+          <div class="panel-header">
+            <h2 style="margin:0;">${Ui.escape(p.title)}</h2>
+            <span class="badge ${Ui.statusBadgeClass(p.status)}">${p.status}</span>
+          </div>
+          <p style="color:var(--gold-300); font-size:1.3rem; font-weight:800; font-family:var(--font-display);">${Ui.money(p.price)}</p>
+          <div class="meta" style="display:flex; flex-wrap:wrap; gap:20px; color:var(--text-muted); margin-bottom:16px;">
+            <span>📍 ${Ui.escape(p.location)}</span>
+            <span>🛏 ${p.bedrooms ?? "-"} bed</span>
+            <span>🛁 ${p.bathrooms ?? "-"} bath</span>
+            <span>📐 ${p.areaSqft ?? "-"} sqft</span>
+            <span>🚗 ${p.parkingSpaces ?? 0} parking</span>
+            <span>${p.poolAvailable ? "🏊 Pool available" : "🏊 No pool"}</span>
+          </div>
+          <p>${Ui.escape(p.description || "No description provided.")}</p>
+          <p style="font-size:0.8rem;">Listed by <strong>${Ui.escape(p.sellerName)}</strong> · ${p.viewCount} views</p>
+        </div>
+
+        <div class="card" style="margin-top:20px;" id="reviews-card">
+          <div class="panel-header">
+            <h3 style="margin:0;">Reviews ${avgRating ? `<span class="rating-stars">${Ui.stars(avgRating)}</span> <span style="color:var(--text-muted); font-size:0.85rem;">(${avgRating}/5, ${reviews.length})</span>` : ""}</h3>
+          </div>
+          <div id="review-list">
+            ${reviews.length ? reviews.map(r => {
+              const isMine = user && Number(user.id) === Number(r.buyerId);
+              return `
+              <div style="padding:12px 0; border-bottom:1px solid var(--border-subtle);">
+                <div style="display:flex; justify-content:space-between;">
+                  <strong style="font-size:0.9rem;">${Ui.escape(r.buyerName)}${isMine ? ' <span style="color:var(--text-muted); font-weight:400;">(you)</span>' : ''}</strong>
+                  <span class="rating-stars">${Ui.stars(r.rating)}</span>
+                </div>
+                <p style="margin:6px 0 4px;">${Ui.escape(r.comment || "")}</p>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-size:0.75rem; color:var(--text-muted);">${Ui.timeAgo(r.createdAt)}</span>
+                  <div style="display:flex; gap:6px;">
+                    ${isMine ? `
+                      <button class="btn btn-ghost btn-sm edit-review-btn" data-id="${r.id}" data-rating="${r.rating}" data-comment="${Ui.escape(r.comment || "")}">Edit</button>
+                      <button class="btn btn-danger btn-sm del-review-btn" data-id="${r.id}">Delete</button>
+                    ` : `
+                      <button class="btn btn-ghost btn-sm flag-btn" data-id="${r.id}">🚩 Flag</button>
+                    `}
+                  </div>
+                </div>
+              </div>`;
+            }).join("") : `<p style="color:var(--text-muted);">No reviews yet.</p>`}
+          </div>
+          ${user && user.role === "BUYER" ? `
+            <div class="divider"></div>
+            <h4 style="font-size:0.95rem;">Leave a review</h4>
+            <form id="review-form">
+              <div class="field">
+                <label>Rating</label>
+                <select id="rev-rating"><option value="5">★★★★★ (5)</option><option value="4">★★★★☆ (4)</option><option value="3">★★★☆☆ (3)</option><option value="2">★★☆☆☆ (2)</option><option value="1">★☆☆☆☆ (1)</option></select>
+              </div>
+              <div class="field"><label>Comment</label><textarea id="rev-comment" placeholder="Share your experience with this property..."></textarea></div>
+              <button type="submit" class="btn btn-primary btn-sm">Post review</button>
+            </form>
+          ` : ""}
+        </div>
+      </div>
+
+      <div>
+        ${user && user.role === "BUYER" ? `
+          ${p.status === "AVAILABLE" ? `
+          <div class="card" style="border:1px solid var(--primary, #3b82f6);">
+            <h3 style="margin-top:0;">Reserve with payment</h3>
+            <p style="color:var(--text-muted); font-size:0.88rem;">
+              Lock this property by paying the full price or a deposit. Status will change to <strong>RESERVED</strong>.
+            </p>
+            <div style="font-size:1.25rem; font-weight:700; margin:12px 0;">${Ui.money(p.price)}</div>
+            <button type="button" class="btn btn-primary btn-block" id="open-reserve-btn">💳 Reserve now</button>
+          </div>
+          ` : p.status === "RESERVED" ? `
+          <div class="card">
+            <h3 style="margin-top:0;">Reserved</h3>
+            <p style="color:var(--text-muted); font-size:0.88rem;">This property is currently reserved. Check your Transactions tab if you are the buyer.</p>
+          </div>
+          ` : `
+          <div class="card">
+            <h3 style="margin-top:0;">Not available</h3>
+            <p style="color:var(--text-muted); font-size:0.88rem;">This property is ${Ui.escape(p.status)} and cannot be reserved.</p>
+          </div>
+          `}
+
+          <div class="card" style="margin-top:20px;">
+            <h3 style="margin-top:0;">Save to wishlist</h3>
+            <form id="wishlist-form">
+              <div class="field"><label>Priority</label>
+                <select id="wl-priority"><option value="MEDIUM">Medium</option><option value="HIGH">High</option><option value="LOW">Low</option></select>
+              </div>
+              <div class="field"><label>Target price (optional)</label><input type="number" id="wl-target" placeholder="e.g. 40000000" /></div>
+              <div class="field"><label>Note</label><textarea id="wl-note" placeholder="Why this property?"></textarea></div>
+              <button type="submit" class="btn btn-primary btn-block">♡ Add to wishlist</button>
+            </form>
+          </div>
+
+          <div class="card" style="margin-top:20px;">
+            <h3 style="margin-top:0;">Book a viewing</h3>
+            <div id="slots-area"><div class="empty-state" style="padding:16px;">Loading available slots…</div></div>
+          </div>
+        ` : ""}
+
+        ${!user ? `
+          <div class="card" style="text-align:center;">
+            <p>Log in as a Buyer to reserve, save this property, or book a viewing.</p>
+            <a href="login.html" class="btn btn-primary btn-block">Log in</a>
+          </div>
+        ` : ""}
+      </div>
+    </div>
+  `;
+
+  document.querySelectorAll(".thumb-select").forEach(t => t.addEventListener("click", () => {
+    document.getElementById("hero-img").src = t.dataset.src;
+  }));
+
+    document.querySelectorAll(".flag-btn").forEach(btn => btn.addEventListener("click", () => {
+    document.getElementById("flag-review-id").value = btn.dataset.id;
+    document.getElementById("flag-review-note").value = "";
+    document.getElementById("flag-review-modal").classList.add("open");
+  }));
+
+  document.querySelectorAll(".edit-review-btn").forEach(btn => btn.addEventListener("click", () => {
+    document.getElementById("rev-edit-id").value = btn.dataset.id;
+    document.getElementById("rev-edit-rating").value = btn.dataset.rating;
+    document.getElementById("rev-edit-comment").value = btn.dataset.comment;
+    document.getElementById("rev-edit-modal").classList.add("open");
+  }));
+
+  document.querySelectorAll(".del-review-btn").forEach(btn => btn.addEventListener("click", async () => {
+    if (!confirm("Delete this review?")) return;
+    try {
+      await Api.del(`/api/reviews/${btn.dataset.id}`);
+      Ui.toast("Review deleted");
+      load();
+    } catch (err) { Ui.errorToast(err); }
+  }));
+
+  const reviewForm = document.getElementById("review-form");
+  if (reviewForm) reviewForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const ratingEl = document.getElementById("rev-rating");
+    const commentEl = document.getElementById("rev-comment");
+    Validate.clear(ratingEl, commentEl);
+    if (!Validate.selectRequired(ratingEl, "a rating")) return;
+    if (!Validate.required(commentEl, "Comment")) return;
+    try {
+      await Api.post("/api/reviews", {
+        propertyId: Number(propertyId),
+        rating: Number(ratingEl.value),
+        comment: commentEl.value.trim(),
+      });
+      Ui.toast("Review posted!");
+      load();
+    } catch (err) { Ui.errorToast(err); }
+  });
+
+  const wlForm = document.getElementById("wishlist-form");
+  if (wlForm) wlForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const priEl = document.getElementById("wl-priority");
+    const targetEl = document.getElementById("wl-target");
+    Validate.clear(priEl, targetEl);
+    if (!Validate.selectRequired(priEl, "a priority")) return;
+    // target price is optional — only validate if filled
+    if (targetEl.value.trim() && !Validate.positiveNumber(targetEl, "Target price")) return;
+    try {
+      await Api.post("/api/wishlist", {
+        propertyId: Number(propertyId),
+        priority: priEl.value,
+        targetPrice: targetEl.value || null,
+        note: document.getElementById("wl-note").value.trim(),
+      });
+      Ui.toast("Added to wishlist ♡");
+    } catch (err) { Ui.errorToast(err); }
+  });
+
+  if (user && user.role === "BUYER") loadSlots(p);
+
+  // Reserve with payment
+  const openReserveBtn = document.getElementById("open-reserve-btn");
+  if (openReserveBtn) {
+    openReserveBtn.addEventListener("click", () => {
+      document.getElementById("reserve-property-id").value = propertyId;
+      const amountEl = document.getElementById("reserve-amount");
+      amountEl.value = p.price;
+      amountEl.max = p.price;
+      document.getElementById("reserve-price-hint").textContent =
+        "Listing price: " + Ui.money(p.price) + " — enter full amount or a smaller deposit.";
+      document.getElementById("reserve-name").value = (user && user.fullName) ? user.fullName : "";
+      document.getElementById("reserve-card").value = "";
+      document.getElementById("reserve-expiry").value = "";
+      document.getElementById("reserve-cvv").value = "";
+      document.getElementById("reserve-method-card").checked = true;
+      document.getElementById("reserve-method-bank").checked = false;
+      const rReceipt = document.getElementById("reserve-receipt");
+      if (rReceipt) rReceipt.value = "";
+      const rRef = document.getElementById("reserve-bank-ref");
+      if (rRef) rRef.value = "";
+      syncReserveMethodUI();
+      document.getElementById("reserve-modal").classList.add("open");
+    });
+  }
+}
+
+document.getElementById("reserve-cancel-btn").addEventListener("click", () => {
+  document.getElementById("reserve-modal").classList.remove("open");
+});
+
+function syncReserveMethodUI() {
+  const bank = document.getElementById("reserve-method-bank").checked;
+  document.getElementById("reserve-card-fields").style.display = bank ? "none" : "block";
+  document.getElementById("reserve-bank-fields").style.display = bank ? "block" : "none";
+  document.getElementById("reserve-submit-btn").textContent = bank ? "Submit & Reserve" : "Pay & Reserve";
+}
+document.getElementById("reserve-method-card").addEventListener("change", syncReserveMethodUI);
+document.getElementById("reserve-method-bank").addEventListener("change", syncReserveMethodUI);
+
+document.getElementById("reserve-submit-btn").addEventListener("click", async () => {
+  const propertyId = Number(document.getElementById("reserve-property-id").value);
+  const amountEl = document.getElementById("reserve-amount");
+  const useBank = document.getElementById("reserve-method-bank").checked;
+  const btn = document.getElementById("reserve-submit-btn");
+
+  const amountVal = amountEl.value.trim();
+  let amount = amountVal ? Number(amountVal) : null;
+  if (amountVal && (!Number.isFinite(amount) || amount <= 0)) {
+    Validate.fail(amountEl, "Enter a valid amount");
+    return;
+  }
+
+  if (useBank) {
+    const receiptEl = document.getElementById("reserve-receipt");
+    const refEl = document.getElementById("reserve-bank-ref");
+    Validate.clear(receiptEl, refEl, amountEl);
+    if (!receiptEl.files || !receiptEl.files[0]) {
+      Validate.fail(receiptEl, "Please upload a receipt photo");
+      return;
+    }
+    if (typeof Validate.imageFile === "function" && !Validate.imageFile(receiptEl.files[0], { optional: false })) {
+      return;
+    }
+    btn.disabled = true; btn.textContent = "Uploading…";
+    try {
+      const form = new FormData();
+      form.append("propertyId", String(propertyId));
+      if (amount != null) form.append("amount", String(amount));
+      form.append("receipt", receiptEl.files[0]);
+      const ref = refEl.value.trim();
+      if (ref) form.append("reference", ref);
+      await Api.postForm("/api/transactions/reserve/bank-transfer", form);
+      Ui.toast("Reservation submitted — awaiting finance verification");
+      document.getElementById("reserve-modal").classList.remove("open");
+      load();
+    } catch (err) { Ui.errorToast(err); }
+    finally { btn.disabled = false; btn.textContent = "Submit & Reserve"; }
+    return;
+  }
+
+  const nameEl = document.getElementById("reserve-name");
+  const cardEl = document.getElementById("reserve-card");
+  const expEl = document.getElementById("reserve-expiry");
+  const cvvEl = document.getElementById("reserve-cvv");
+  Validate.clear(nameEl, cardEl, expEl, cvvEl, amountEl);
+  if (!Validate.required(nameEl, "Cardholder name")) return;
+  const digits = cardEl.value.replace(/\D/g, "");
+  if (digits.length !== 16) {
+    Validate.fail(cardEl, "Card number must be exactly 16 digits");
+    return;
+  }
+  if (!Validate.required(expEl, "Expiry")) return;
+  if (!/^\d{2}\/\d{2}$/.test(expEl.value.trim())) {
+    Validate.fail(expEl, "Use MM/YY format");
+    return;
+  }
+  if (!Validate.required(cvvEl, "CVV")) return;
+  if (!/^\d{3,4}$/.test(cvvEl.value.trim())) {
+    Validate.fail(cvvEl, "CVV must be 3 or 4 digits");
+    return;
+  }
+
+  const payload = {
+    propertyId,
+    cardholderName: nameEl.value.trim(),
+    cardNumber: cardEl.value.trim(),
+    expiry: expEl.value.trim(),
+    cvv: cvvEl.value.trim(),
+  };
+  if (amount != null) payload.amount = amount;
+
+  btn.disabled = true; btn.textContent = "Processing…";
+  try {
+    await Api.post("/api/transactions/reserve", payload);
+    Ui.toast("Property reserved successfully");
+    document.getElementById("reserve-modal").classList.remove("open");
+    load();
+  } catch (err) { Ui.errorToast(err); }
+  finally { btn.disabled = false; btn.textContent = "Pay & Reserve"; }
+});
+
+async function loadSlots(property) {
+  const area = document.getElementById("slots-area");
+  try {
+    // Prefer agents whose branch matches the property district; fall back to all agents
+    let agents = [];
+    const district = property.location || "";
+    if (district) {
+      try {
+        agents = await Api.get("/api/users/agents?branch=" + encodeURIComponent(district));
+      } catch (_) { agents = []; }
+    }
+    let districtOnly = agents.length > 0;
+    if (!agents.length) {
+      agents = await Api.get("/api/users/agents");
+      districtOnly = false;
+    }
+    if (!agents.length) {
+      area.innerHTML = `<div class="empty-state" style="padding:16px;">No agents registered yet.</div>`;
+      return;
+    }
+
+    let allSlots = [];
+    for (const agent of agents) {
+      const slots = await Api.get(`/api/appointments/slots/${agent.id}`);
+      allSlots = allSlots.concat(slots.map(s => ({ ...s, agentBranch: agent.branch })));
+    }
+    if (!allSlots.length) {
+      area.innerHTML = `<div class="empty-state" style="padding:16px;">No open viewing slots${districtOnly ? " from agents in " + Ui.escape(district) : ""} right now.</div>`;
+      return;
+    }
+
+    const note = districtOnly
+      ? `<p style="font-size:0.8rem; color:var(--text-muted); margin:0 0 10px;">Showing agents for district: <strong>${Ui.escape(district)}</strong></p>`
+      : (district
+          ? `<p style="font-size:0.8rem; color:var(--text-muted); margin:0 0 10px;">No agents assigned to <strong>${Ui.escape(district)}</strong> yet — showing all agents.</p>`
+          : "");
+
+    area.innerHTML = note + allSlots.map(s => `
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--border-subtle);">
+        <div>
+          <div style="font-weight:700; font-size:0.88rem;">${Ui.dateTime(s.slotDateTime)}</div>
+          <div style="font-size:0.75rem; color:var(--text-muted);">Agent: ${Ui.escape(s.agentName)}${s.agentBranch ? " · " + Ui.escape(s.agentBranch) : ""}</div>
+        </div>
+        <div style="display:flex; gap:6px; flex-shrink:0;">
+          <button class="btn btn-primary btn-sm book-btn" data-slot="${s.id}">Book</button>
+          ${user && s.agentId ? `<button class="btn btn-ghost btn-sm report-agent-btn" data-agent="${s.agentId}" data-name="${Ui.escape(s.agentName || "")}">🚩 Report</button>` : ""}
+        </div>
+      </div>
+    `).join("");
+
+    document.querySelectorAll(".book-btn").forEach(btn => btn.addEventListener("click", async () => {
+      try {
+        await Api.post("/api/appointments", { propertyId: Number(propertyId), slotId: Number(btn.dataset.slot) });
+        Ui.toast("Viewing requested! The agent will confirm shortly.");
+        loadSlots(property);
+      } catch (err) { Ui.errorToast(err); }
+    }));
+    document.querySelectorAll(".report-agent-btn").forEach(btn => btn.addEventListener("click", () => {
+      document.getElementById("report-agent-id").value = btn.dataset.agent;
+      document.getElementById("report-agent-label").textContent =
+        "Report agent " + (btn.dataset.name || "") + ". An administrator will review your note.";
+      document.getElementById("report-agent-note").value = "";
+      document.getElementById("report-agent-modal").classList.add("open");
+    }));
+  } catch (err) {
+    area.innerHTML = `<div class="empty-state" style="padding:16px;">Couldn't load slots.</div>`;
+  }
+}
+
+document.getElementById("rev-edit-cancel").addEventListener("click", () => {
+  document.getElementById("rev-edit-modal").classList.remove("open");
+});
+document.getElementById("rev-edit-save").addEventListener("click", async () => {
+  const id = document.getElementById("rev-edit-id").value;
+  const ratingEl = document.getElementById("rev-edit-rating");
+  const commentEl = document.getElementById("rev-edit-comment");
+  Validate.clear(ratingEl, commentEl);
+  if (!Validate.selectRequired(ratingEl, "a rating")) return;
+  if (!Validate.required(commentEl, "Comment")) return;
+  try {
+    await Api.put(`/api/reviews/${id}`, {
+      rating: Number(ratingEl.value),
+      comment: commentEl.value.trim(),
+    });
+    Ui.toast("Review updated");
+    document.getElementById("rev-edit-modal").classList.remove("open");
+    load();
+  } catch (err) { Ui.errorToast(err); }
+});
+
+
+document.getElementById("flag-review-cancel")?.addEventListener("click", () => {
+  document.getElementById("flag-review-modal").classList.remove("open");
+});
+document.getElementById("flag-review-submit")?.addEventListener("click", async () => {
+  const id = document.getElementById("flag-review-id").value;
+  const noteEl = document.getElementById("flag-review-note");
+  Validate.clear(noteEl);
+  if (!Validate.required(noteEl, "Reason / note")) return;
+  if (noteEl.value.trim().length < 5) {
+    Validate.fail(noteEl, "Please write at least 5 characters");
+    return;
+  }
+  try {
+    await Api.post(`/api/reviews/${id}/flag`, { note: noteEl.value.trim() });
+    Ui.toast("Review flagged for moderation");
+    document.getElementById("flag-review-modal").classList.remove("open");
+    load();
+  } catch (err) { Ui.errorToast(err); }
+});
+
+document.getElementById("report-agent-cancel")?.addEventListener("click", () => {
+  document.getElementById("report-agent-modal").classList.remove("open");
+});
+document.getElementById("report-agent-submit")?.addEventListener("click", async () => {
+  const agentId = document.getElementById("report-agent-id").value;
+  const noteEl = document.getElementById("report-agent-note");
+  Validate.clear(noteEl);
+  if (!Validate.required(noteEl, "Reason / note")) return;
+  if (noteEl.value.trim().length < 5) {
+    Validate.fail(noteEl, "Please write at least 5 characters");
+    return;
+  }
+  try {
+    await Api.post(`/api/agent-reports/agent/${agentId}`, { note: noteEl.value.trim() });
+    Ui.toast("Agent reported — admin will review");
+    document.getElementById("report-agent-modal").classList.remove("open");
+  } catch (err) { Ui.errorToast(err); }
+});
+
+load();
+</script>
+</body>
+</html>

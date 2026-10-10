@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>
+/* Apply saved theme before CSS paints — prevents flash & keeps pages consistent */
+(function(){try{var t=localStorage.getItem("ee_theme");if(t!=="light"&&t!=="dark")t="dark";document.documentElement.setAttribute("data-theme",t);}catch(e){document.documentElement.setAttribute("data-theme","dark");}})();
+</script>
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Admin Dashboard - Estate Elite</title>
+<link rel="stylesheet" href="css/theme.css" />
+<script src="js/theme.js"></script>
+</head>
+<body data-nav="dashboard">
+<div id="ee-nav-mount"></div>
+
+<div class="ee-container" style="padding-top:30px; padding-bottom:60px;">
+  <div class="panel-header">
+    <div>
+      <span class="badge badge-gold">Agency Management Module</span>
+      <h1 style="margin-top:10px;">Admin Dashboard</h1>
+    </div>
+    <button class="btn btn-primary" id="new-agency-btn">+ Add agency</button>
+  </div>
+
+  <div class="tab-bar">
+    <div class="tab-btn active" data-tab="agencies">🏢 Agencies</div>
+    <div class="tab-btn" data-tab="flagged">🚩 Flagged reviews</div>
+    <div class="tab-btn" data-tab="agent-reports">⚠️ Agent reports</div>
+    <div class="tab-btn" data-tab="users">👥 All users</div>
+  </div>
+
+  <div id="tab-agencies" class="tab-panel"></div>
+  <div id="tab-flagged" class="tab-panel" style="display:none;"></div>
+  <div id="tab-agent-reports" class="tab-panel" style="display:none;"></div>
+  <div id="tab-users" class="tab-panel" style="display:none;"></div>
+</div>
+
+<div class="modal-overlay" id="agency-modal">
+  <div class="modal-box">
+    <h3 id="agency-modal-title">Add agency</h3>
+    <input type="hidden" id="agency-edit-id" />
+    <div class="field"><label>Name</label><input type="text" id="agency-name" required /></div>
+    <div class="field"><label>License number</label><input type="text" id="agency-license" required /></div>
+    <div class="field-row">
+      <div class="field"><label>Contact email</label><input type="email" id="agency-email" /></div>
+      <div class="field"><label>Contact phone</label><input type="text" id="agency-phone" /></div>
+    </div>
+    <div class="field"><label>Address</label><input type="text" id="agency-address" /></div>
+    <div style="display:flex; gap:10px;">
+      <button class="btn btn-primary" style="flex:1;" id="agency-save-btn">Save</button>
+      <button class="btn btn-ghost" id="agency-cancel-btn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/validate.js"></script>
+<script>
+const me = Auth.guard("ADMIN");
+let agencyCache = [];
+
+document.querySelectorAll(".tab-btn").forEach(btn => btn.addEventListener("click", () => {
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".tab-panel").forEach(p => p.style.display = "none");
+  btn.classList.add("active");
+  document.getElementById("tab-" + btn.dataset.tab).style.display = "block";
+  loaders[btn.dataset.tab]();
+}));
+
+async function loadAgencies() {
+  const el = document.getElementById("tab-agencies");
+  el.innerHTML = `<div class="empty-state"><div class="glyph">⏳</div>Loading…</div>`;
+  try {
+    agencyCache = await Api.get("/api/agencies");
+    if (!agencyCache.length) { el.innerHTML = `<div class="empty-state"><div class="glyph">🏢</div>No agencies yet - add the first one.</div>`; return; }
+    el.innerHTML = `<div class="card"><table>
+      <thead><tr><th>Name</th><th>License</th><th>Contact</th><th>Agents</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>${agencyCache.map(a => `
+        <tr>
+          <td>${Ui.escape(a.name)}</td>
+          <td>${Ui.escape(a.licenseNumber)}</td>
+          <td>${Ui.escape(a.contactEmail || "-")}<br/><span style="color:var(--text-muted);">${Ui.escape(a.contactPhone || "")}</span></td>
+          <td>${a.agents.length}</td>
+          <td><span class="badge ${Ui.statusBadgeClass(a.status)}">${a.status}</span></td>
+          <td>
+            <button class="btn btn-ghost btn-sm agency-edit" data-id="${a.id}">Edit</button>
+            <button class="btn btn-ghost btn-sm agency-toggle" data-id="${a.id}" data-status="${a.status}">${a.status === "ACTIVE" ? "Deactivate" : "Activate"}</button>
+            <button class="btn btn-danger btn-sm agency-delete" data-id="${a.id}">Delete</button>
+          </td>
+        </tr>
+      `).join("")}</tbody>
+    </table></div>`;
+
+    document.querySelectorAll(".agency-edit").forEach(b => b.addEventListener("click", () => openAgencyEdit(b.dataset.id)));
+    document.querySelectorAll(".agency-toggle").forEach(b => b.addEventListener("click", async () => {
+      const newStatus = b.dataset.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+      try { await Api.patch(`/api/agencies/${b.dataset.id}/status?status=${newStatus}`); Ui.toast("Status updated"); loadAgencies(); }
+      catch (err) { Ui.errorToast(err); }
+    }));
+    document.querySelectorAll(".agency-delete").forEach(b => b.addEventListener("click", async () => {
+      if (!confirm("Remove this agency permanently?")) return;
+      try { await Api.del(`/api/agencies/${b.dataset.id}`); Ui.toast("Agency removed"); loadAgencies(); }
+      catch (err) { Ui.errorToast(err); }
+    }));
+  } catch (err) { Ui.errorToast(err); }
+}
+
+const agencyModal = document.getElementById("agency-modal");
+document.getElementById("new-agency-btn").addEventListener("click", () => {
+  document.getElementById("agency-modal-title").textContent = "Add agency";
+  ["agency-edit-id","agency-name","agency-license","agency-email","agency-phone","agency-address"].forEach(id => document.getElementById(id).value = "");
+  agencyModal.classList.add("open");
+});
+document.getElementById("agency-cancel-btn").addEventListener("click", () => agencyModal.classList.remove("open"));
+
+function openAgencyEdit(id) {
+  const a = agencyCache.find(x => String(x.id) === String(id));
+  if (!a) return;
+  document.getElementById("agency-modal-title").textContent = "Edit agency";
+  document.getElementById("agency-edit-id").value = a.id;
+  document.getElementById("agency-name").value = a.name;
+  document.getElementById("agency-license").value = a.licenseNumber;
+  document.getElementById("agency-email").value = a.contactEmail || "";
+  document.getElementById("agency-phone").value = a.contactPhone || "";
+  document.getElementById("agency-address").value = a.address || "";
+  agencyModal.classList.add("open");
+}
+
+document.getElementById("agency-save-btn").addEventListener("click", async () => {
+  const nameEl = document.getElementById("agency-name");
+  const licEl = document.getElementById("agency-license");
+  const emailEl = document.getElementById("agency-email");
+  const phoneEl = document.getElementById("agency-phone");
+  const addrEl = document.getElementById("agency-address");
+  Validate.clear(nameEl, licEl, emailEl, phoneEl, addrEl);
+
+  if (!Validate.required(nameEl, "Agency name")) return;
+  if (!Validate.required(licEl, "License number")) return;
+  // Email/phone optional on agency, but validate format when filled
+  if (emailEl.value.trim() && !Validate.email(emailEl, "Contact email")) return;
+  if (!Validate.phone(phoneEl, "Contact phone", { optional: true })) return;
+
+  const id = document.getElementById("agency-edit-id").value;
+  const payload = {
+    name: nameEl.value.trim(),
+    licenseNumber: licEl.value.trim(),
+    contactEmail: emailEl.value.trim(),
+    contactPhone: phoneEl.value.trim(),
+    address: addrEl.value.trim(),
+  };
+  try {
+    if (id) await Api.put(`/api/agencies/${id}`, payload);
+    else await Api.post("/api/agencies", payload);
+    Ui.toast("Agency saved");
+    agencyModal.classList.remove("open");
+    loadAgencies();
+  } catch (err) { Ui.errorToast(err); }
+});
+
+// ---------------- Flagged reviews ----------------
+async function loadFlagged() {
+  const el = document.getElementById("tab-flagged");
+  el.innerHTML = `<div class="empty-state"><div class="glyph">⏳</div>Loading…</div>`;
+  try {
+    const items = await Api.get("/api/reviews/flagged");
+    if (!items.length) { el.innerHTML = `<div class="empty-state"><div class="glyph">✅</div>No flagged reviews right now.</div>`; return; }
+    el.innerHTML = items.map(r => `
+      <div class="card" style="margin-bottom:12px;">
+        <div style="display:flex; justify-content:space-between;">
+          <strong>${Ui.escape(r.propertyTitle || r.agentName || "Review")} - by ${Ui.escape(r.buyerName)}</strong>
+          <span class="rating-stars">${Ui.stars(r.rating)}</span>
+        </div>
+        <p>${Ui.escape(r.comment || "")}</p>
+        ${r.flagNote ? `<p style="font-size:0.88rem; background:rgba(190,60,80,0.08); padding:8px 10px; border-radius:8px;"><strong>Flag note:</strong> ${Ui.escape(r.flagNote)}</p>` : `<p style="font-size:0.8rem; color:var(--text-muted);">No flag note provided.</p>`}
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-ghost btn-sm unflag-btn" data-id="${r.id}">Clear flag</button>
+          <button class="btn btn-danger btn-sm remove-review-btn" data-id="${r.id}">Delete review</button>
+        </div>
+      </div>
+    `).join("");
+    document.querySelectorAll(".unflag-btn").forEach(b => b.addEventListener("click", async () => {
+      try { await Api.post(`/api/reviews/${b.dataset.id}/unflag`, {}); Ui.toast("Flag cleared"); loadFlagged(); }
+      catch (err) { Ui.errorToast(err); }
+    }));
+    document.querySelectorAll(".remove-review-btn").forEach(b => b.addEventListener("click", async () => {
+      if (!confirm("Delete this review?")) return;
+      try { await Api.del(`/api/reviews/${b.dataset.id}`); Ui.toast("Review removed"); loadFlagged(); }
+      catch (err) { Ui.errorToast(err); }
+    }));
+  } catch (err) { Ui.errorToast(err); }
+}
+
+// ---------------- All users ----------------
+async function loadUsers() {
+  const el = document.getElementById("tab-users");
+  el.innerHTML = `<div class="empty-state"><div class="glyph">⏳</div>Loading…</div>`;
+  try {
+    const users = await Api.get("/api/users");
+    el.innerHTML = `<div class="card"><table>
+      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Agency</th></tr></thead>
+      <tbody>${users.map(u => `
+        <tr><td>${Ui.escape(u.fullName)}</td><td>${Ui.escape(u.email)}</td><td><span class="badge badge-blue">${Auth.roleLabel(u.role)}</span></td><td>${Ui.escape(u.agencyName || "-")}</td></tr>
+      `).join("")}</tbody>
+    </table></div>`;
+  } catch (err) { Ui.errorToast(err); }
+}
+
+
+// ---------------- Agent reports ----------------
+async function loadAgentReports() {
+  const el = document.getElementById("tab-agent-reports");
+  el.innerHTML = `<div class="empty-state"><div class="glyph">⏳</div>Loading…</div>`;
+  try {
+    const items = await Api.get("/api/agent-reports/open");
+    if (!items.length) {
+      el.innerHTML = `<div class="empty-state"><div class="glyph">✅</div>No open agent reports.</div>`;
+      return;
+    }
+    el.innerHTML = items.map(r => `
+      <div class="card" style="margin-bottom:12px;">
+        <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+          <div>
+            <strong>Agent: ${Ui.escape(r.agentName)}</strong>
+            <span style="color:var(--text-muted); font-size:0.85rem;"> · ${Ui.escape(r.agentEmail || "")}${r.agentBranch ? " · " + Ui.escape(r.agentBranch) : ""}</span>
+          </div>
+          <span class="badge badge-gold">Open</span>
+        </div>
+        <p style="margin:10px 0 6px;"><strong>Reported by:</strong> ${Ui.escape(r.reporterName)} · ${Ui.timeAgo(r.createdAt)}</p>
+        <p style="font-size:0.9rem; background:rgba(190,60,80,0.08); padding:10px 12px; border-radius:8px;"><strong>Note:</strong> ${Ui.escape(r.note)}</p>
+        <div style="display:flex; gap:8px; margin-top:10px;">
+          <button class="btn btn-primary btn-sm resolve-report-btn" data-id="${r.id}">Mark resolved</button>
+          <button class="btn btn-danger btn-sm delete-report-btn" data-id="${r.id}">Dismiss</button>
+        </div>
+      </div>
+    `).join("");
+    document.querySelectorAll(".resolve-report-btn").forEach(b => b.addEventListener("click", async () => {
+      try {
+        await Api.post(`/api/agent-reports/${b.dataset.id}/resolve`, {});
+        Ui.toast("Report marked resolved");
+        loadAgentReports();
+      } catch (err) { Ui.errorToast(err); }
+    }));
+    document.querySelectorAll(".delete-report-btn").forEach(b => b.addEventListener("click", async () => {
+      if (!confirm("Dismiss this report without further action?")) return;
+      try {
+        await Api.del(`/api/agent-reports/${b.dataset.id}`);
+        Ui.toast("Report dismissed");
+        loadAgentReports();
+      } catch (err) { Ui.errorToast(err); }
+    }));
+  } catch (err) { Ui.errorToast(err); }
+}
+
+const loaders = { agencies: loadAgencies, flagged: loadFlagged, "agent-reports": loadAgentReports, users: loadUsers };
+loadAgencies();
+</script>
+</body>
+</html>

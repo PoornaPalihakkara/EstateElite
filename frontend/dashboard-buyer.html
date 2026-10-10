@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>
+/* Apply saved theme before CSS paints — prevents flash & keeps pages consistent */
+(function(){try{var t=localStorage.getItem("ee_theme");if(t!=="light"&&t!=="dark")t="dark";document.documentElement.setAttribute("data-theme",t);}catch(e){document.documentElement.setAttribute("data-theme","dark");}})();
+</script>
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Buyer Dashboard - Estate Elite</title>
+<link rel="stylesheet" href="css/theme.css" />
+<script src="js/theme.js"></script>
+</head>
+<body data-nav="dashboard">
+<div id="ee-nav-mount"></div>
+
+<div class="ee-container" style="padding-top:30px; padding-bottom:60px;">
+  <span class="badge badge-gold">Buyer / Client Module</span>
+  <h1 style="margin-top:10px;">My Dashboard</h1>
+
+  <div class="tab-bar">
+    <div class="tab-btn active" data-tab="wishlist">♡ Wishlist</div>
+    <div class="tab-btn" data-tab="appointments">📅 Viewings</div>
+    <div class="tab-btn" data-tab="transactions">💳 Transactions</div>
+    <div class="tab-btn" data-tab="reviews">⭐ My Reviews</div>
+  </div>
+
+  <div id="tab-wishlist" class="tab-panel"></div>
+  <div id="tab-appointments" class="tab-panel" style="display:none;"></div>
+  <div id="tab-transactions" class="tab-panel" style="display:none;"></div>
+  <div id="tab-reviews" class="tab-panel" style="display:none;"></div>
+</div>
+
+<div class="modal-overlay" id="wl-edit-modal">
+  <div class="modal-box">
+    <h3>Edit wishlist item</h3>
+    <input type="hidden" id="wl-edit-id" />
+    <input type="hidden" id="wl-edit-property-id" />
+    <div class="field"><label>Priority</label>
+      <select id="wl-edit-priority"><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="HIGH">High</option></select>
+    </div>
+    <div class="field"><label>Target price</label><input type="number" id="wl-edit-target" /></div>
+    <div class="field"><label>Note</label><textarea id="wl-edit-note"></textarea></div>
+    <div style="display:flex; gap:10px;">
+      <button class="btn btn-primary" style="flex:1;" id="wl-edit-save">Save</button>
+      <button class="btn btn-ghost" id="wl-edit-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="rev-edit-modal">
+  <div class="modal-box">
+    <h3>Edit review</h3>
+    <input type="hidden" id="rev-edit-id" />
+    <div class="field"><label>Rating</label>
+      <select id="rev-edit-rating">
+        <option value="5">5 ★</option>
+        <option value="4">4 ★</option>
+        <option value="3">3 ★</option>
+        <option value="2">2 ★</option>
+        <option value="1">1 ★</option>
+      </select>
+    </div>
+    <div class="field"><label>Comment</label><textarea id="rev-edit-comment" rows="4"></textarea></div>
+    <div style="display:flex; gap:10px;">
+      <button class="btn btn-primary" style="flex:1;" id="rev-edit-save">Save</button>
+      <button class="btn btn-ghost" id="rev-edit-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="pay-modal">
+  <div class="modal-box">
+    <h3 style="margin-top:0;">Payment</h3>
+    <p style="font-size:0.85rem; color:var(--text-muted); margin-top:0;">
+      Choose how you want to pay this invoice.
+    </p>
+    <input type="hidden" id="pay-txn-id" />
+    <div class="field"><label>Invoice</label><input type="text" id="pay-invoice-label" disabled /></div>
+    <div class="field"><label>Amount</label><input type="text" id="pay-amount-label" disabled /></div>
+
+    <div class="field">
+      <label>Payment method</label>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; text-transform:none; font-weight:600; letter-spacing:0; opacity:1;">
+          <input type="radio" name="pay-method" id="pay-method-card" value="CARD" checked /> Card
+        </label>
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; text-transform:none; font-weight:600; letter-spacing:0; opacity:1;">
+          <input type="radio" name="pay-method" id="pay-method-bank" value="BANK_TRANSFER" /> Bank transfer
+        </label>
+      </div>
+    </div>
+
+    <div id="pay-card-fields">
+      <div class="field"><label>Cardholder name</label><input type="text" id="pay-name" placeholder="Jane Perera" autocomplete="cc-name" /></div>
+      <div class="field"><label>Card number</label><input type="text" id="pay-card" placeholder="4242 4242 4242 4242" inputmode="numeric" autocomplete="cc-number" /></div>
+      <div class="field-row">
+        <div class="field"><label>Expiry (MM/YY)</label><input type="text" id="pay-expiry" placeholder="12/28" autocomplete="cc-exp" /></div>
+        <div class="field"><label>CVV</label><input type="text" id="pay-cvv" placeholder="123" inputmode="numeric" autocomplete="cc-csc" /></div>
+      </div>
+    </div>
+
+    <div id="pay-bank-fields" style="display:none;">
+      <p style="font-size:0.88rem; color:var(--text-muted); margin:0 0 12px;">
+        Transfer the invoice amount to the agency bank account, then upload a photo of your receipt/slip.
+        Finance will verify and mark the invoice complete.
+      </p>
+      <div class="field"><label>Transfer reference (optional)</label>
+        <input type="text" id="pay-bank-ref" placeholder="e.g. bank ref / slip number" />
+      </div>
+      <div class="field"><label>Receipt photo</label>
+        <input type="file" id="pay-receipt" accept="image/*" />
+      </div>
+    </div>
+
+    <div style="display:flex; gap:10px;">
+      <button class="btn btn-primary" style="flex:1;" id="pay-submit-btn">Pay now</button>
+      <button class="btn btn-ghost" id="pay-cancel-btn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/validate.js"></script>
+<script>
+const me = Auth.guard("BUYER");
+
+document.querySelectorAll(".tab-btn").forEach(btn => btn.addEventListener("click", () => {
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".tab-panel").forEach(p => p.style.display = "none");
+  btn.classList.add("active");
+  document.getElementById("tab-" + btn.dataset.tab).style.display = "block";
+  loaders[btn.dataset.tab]();
+}));
+
+// ---------------- Wishlist ----------------
+async function loadWishlist() {
+  const el = document.getElementById("tab-wishlist");
+  el.innerHTML = `<div class="empty-state"><div class="glyph">⏳</div>Loading…</div>`;
+  try {
+    const items = await Api.get("/api/wishlist");
+    if (!items.length) { el.innerHTML = `<div class="empty-state"><div class="glyph">♡</div>Your wishlist is empty - browse properties to save some.</div>`; return; }
+    el.innerHTML = `<div class="property-grid">${items.map(w => `
+      <div class="property-card">
+        <a href="property.html?id=${w.property.id}" class="thumb">
+          <img src="${(w.property.images[0] ? Api.fileUrl(w.property.images[0].imageUrl) : Ui.placeholderPropertyImg(w.property.id))}" onerror="this.src='${Ui.placeholderPropertyImg(w.property.id)}'"/>
+          <span class="badge badge-gold status-pill">${w.priority}</span>
+        </a>
+        <div class="body">
+          <h3 class="title">${Ui.escape(w.property.title)}</h3>
+          <div class="meta"><span>📍 ${Ui.escape(w.property.location)}</span></div>
+          <p style="font-size:0.85rem;">${Ui.escape(w.note || "No note")}</p>
+          ${w.targetPrice ? `<p style="font-size:0.8rem; color:var(--text-muted);">Target: ${Ui.money(w.targetPrice)}</p>` : ""}
+          <div class="footer-row">
+            <button class="btn btn-ghost btn-sm wl-edit" data-id="${w.id}" data-property="${w.property.id}" data-priority="${w.priority}" data-target="${w.targetPrice || ""}" data-note="${Ui.escape(w.note || "")}" style="flex:1;">Edit</button>
+            <button class="btn btn-danger btn-sm wl-remove" data-id="${w.id}">Remove</button>
+          </div>
+        </div>
+      </div>
+    `).join("")}</div>`;
+
+    document.querySelectorAll(".wl-remove").forEach(btn => btn.addEventListener("click", async () => {
+      try { await Api.del(`/api/wishlist/${btn.dataset.id}`); Ui.toast("Removed from wishlist"); loadWishlist(); }
+      catch (err) { Ui.errorToast(err); }
+    }));
+    document.querySelectorAll(".wl-edit").forEach(btn => btn.addEventListener("click", () => {
+      document.getElementById("wl-edit-id").value = btn.dataset.id;
+      document.getElementById("wl-edit-property-id").value = btn.dataset.property;
+      document.getElementById("wl-edit-priority").value = btn.dataset.priority;
+      document.getElementById("wl-edit-target").value = btn.dataset.target;
+      document.getElementById("wl-edit-note").value = btn.dataset.note;
+      document.getElementById("wl-edit-modal").classList.add("open");
+    }));
+  } catch (err) { Ui.errorToast(err); }
+}
+
+document.getElementById("wl-edit-cancel").addEventListener("click", () => document.getElementById("wl-edit-modal").classList.remove("open"));
+document.getElementById("wl-edit-save").addEventListener("click", async () => {
+  const id = document.getElementById("wl-edit-id").value;
+  const priEl = document.getElementById("wl-edit-priority");
+  const targetEl = document.getElementById("wl-edit-target");
+  Validate.clear(priEl, targetEl);
+  if (!Validate.selectRequired(priEl, "a priority")) return;
+  if (targetEl.value.trim() && !Validate.positiveNumber(targetEl, "Target price")) return;
+  try {
+    await Api.put(`/api/wishlist/${id}`, {
+      propertyId: Number(document.getElementById("wl-edit-property-id").value),
+      priority: priEl.value,
+      targetPrice: targetEl.value || null,
+      note: document.getElementById("wl-edit-note").value.trim(),
+    });
+    Ui.toast("Wishlist item updated");
+    document.getElementById("wl-edit-modal").classList.remove("open");
+    loadWishlist();
+  } catch (err) { Ui.errorToast(err); }
+});
+
+// ---------------- Appointments ----------------
+async function loadAppointments() {
+  const el = document.getElementById("tab-appointments");
+  el.innerHTML = `<div class="empty-state"><div class="glyph">⏳</div>Loading…</div>`;
+  try {
+    const items = await Api.get("/api/appointments/buyer");
+    if (!items.length) { el.innerHTML = `<div class="empty-state"><div class="glyph">📅</div>No viewings booked yet.</div>`; return; }
+    el.innerHTML = `<div class="card"><table>
+      <thead><tr><th>Property</th><th>Agent</th><th>Date & time</th><th>Status</th><th></th></tr></thead>
+      <tbody>${items.map(a => `
+        <tr>
+          <td><a href="property.html?id=${a.propertyId}">${Ui.escape(a.propertyTitle)}</a></td>
+          <td>${Ui.escape(a.agentName)}</td>
+          <td>${Ui.dateTime(a.slotDateTime)}</td>
+          <td><span class="badge ${Ui.statusBadgeClass(a.status)}">${a.status}</span></td>
+          <td>${a.status === "PENDING" || a.status === "CONFIRMED" ? `<button class="btn btn-danger btn-sm cancel-appt" data-id="${a.id}">Cancel</button>` : `<button class="btn btn-ghost btn-sm delete-appt" data-id="${a.id}">Delete</button>`}</td>
+        </tr>
+      `).join("")}</tbody>
+    </table></div>`;
+    document.querySelectorAll(".cancel-appt").forEach(btn => btn.addEventListener("click", async () => {
+      try { await Api.patch(`/api/appointments/${btn.dataset.id}/status`, { status: "CANCELLED" }); Ui.toast("Appointment cancelled"); loadAppointments(); }
+      catch (err) { Ui.errorToast(err); }
+    }));
+    document.querySelectorAll(".delete-appt").forEach(btn => btn.addEventListener("click", async () => {
+      if (!confirm("Permanently delete this appointment record?")) return;
+      try { await Api.del(`/api/appointments/${btn.dataset.id}`); Ui.toast("Appointment deleted"); loadAppointments(); }
+      catch (err) { Ui.errorToast(err); }
+    }));
+  } catch (err) { Ui.errorToast(err); }
+}
+
+// ---------------- Transactions + demo payment ----------------
+async function loadTransactions() {
+  const el = document.getElementById("tab-transactions");
+  el.innerHTML = `<div class="empty-state"><div class="glyph">⏳</div>Loading…</div>`;
+  try {
+    const items = await Api.get("/api/transactions/mine");
+    if (!items.length) { el.innerHTML = `<div class="empty-state"><div class="glyph">💳</div>No transactions yet.</div>`; return; }
+    el.innerHTML = `<div class="card"><table>
+      <thead><tr><th>Invoice #</th><th>Property</th><th>Amount</th><th>Method</th><th>Status</th><th></th></tr></thead>
+      <tbody>${items.map(t => {
+        const hasBankReceipt = t.paymentMethod === "BANK_TRANSFER" && t.status === "PENDING";
+        const canPay = t.status === "DRAFT" || (t.status === "PENDING" && !hasBankReceipt);
+        const methodLabel = t.paymentMethod
+          ? (t.paymentMethod === "BANK_TRANSFER" ? "Bank transfer" : "Card")
+          : "—";
+        return `
+        <tr>
+          <td>${Ui.escape(t.invoiceNumber)}</td>
+          <td>${Ui.escape(t.propertyTitle)}</td>
+          <td>${Ui.money(t.amount)}</td>
+          <td>${Ui.escape(methodLabel)}${t.transferReference ? `<div style="font-size:0.75rem;color:var(--text-muted);">${Ui.escape(t.transferReference)}</div>` : ""}</td>
+          <td><span class="badge ${Ui.statusBadgeClass(t.status)}">${t.status}</span></td>
+          <td style="white-space:nowrap;">
+            ${canPay ? `<button class="btn btn-primary btn-sm txn-pay"
+              data-id="${t.id}"
+              data-invoice="${Ui.escape(t.invoiceNumber || t.id)}"
+              data-amount="${t.amount}">Pay</button>` : ""}
+            <button class="btn btn-ghost btn-sm txn-pdf" data-id="${t.id}" data-invoice="${Ui.escape(t.invoiceNumber || t.id)}">📄 PDF</button>
+          </td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table></div>
+    <p style="font-size:0.78rem; color:var(--text-muted); margin-top:10px;">
+      Payment gateway
+    </p>`;
+    document.querySelectorAll(".txn-pdf").forEach(btn => btn.addEventListener("click", async () => {
+      try {
+        await Api.download(`/api/transactions/${btn.dataset.id}/invoice`, `invoice-${btn.dataset.invoice}.pdf`);
+        Ui.toast("Invoice downloaded");
+      } catch (err) { Ui.errorToast(err); }
+    }));
+    document.querySelectorAll(".txn-pay").forEach(btn => btn.addEventListener("click", () => {
+      document.getElementById("pay-txn-id").value = btn.dataset.id;
+      document.getElementById("pay-invoice-label").value = btn.dataset.invoice;
+      document.getElementById("pay-amount-label").value = Ui.money(btn.dataset.amount);
+      document.getElementById("pay-name").value = (me && me.fullName) ? me.fullName : "";
+      document.getElementById("pay-card").value = "";
+      document.getElementById("pay-expiry").value = "";
+      document.getElementById("pay-cvv").value = "";
+      document.getElementById("pay-method-card").checked = true;
+      document.getElementById("pay-method-bank").checked = false;
+      if (document.getElementById("pay-receipt")) document.getElementById("pay-receipt").value = "";
+      if (document.getElementById("pay-bank-ref")) document.getElementById("pay-bank-ref").value = "";
+      syncPayMethodUI();
+      document.getElementById("pay-modal").classList.add("open");
+    }));
+  } catch (err) { Ui.errorToast(err); }
+}
+
+document.getElementById("pay-cancel-btn").addEventListener("click", () => {
+  document.getElementById("pay-modal").classList.remove("open");
+});
+
+function syncPayMethodUI() {
+  const bank = document.getElementById("pay-method-bank").checked;
+  document.getElementById("pay-card-fields").style.display = bank ? "none" : "block";
+  document.getElementById("pay-bank-fields").style.display = bank ? "block" : "none";
+  document.getElementById("pay-submit-btn").textContent = bank ? "Submit transfer" : "Pay now";
+}
+document.getElementById("pay-method-card").addEventListener("change", syncPayMethodUI);
+document.getElementById("pay-method-bank").addEventListener("change", syncPayMethodUI);
+
+document.getElementById("pay-submit-btn").addEventListener("click", async () => {
+  const id = document.getElementById("pay-txn-id").value;
+  const useBank = document.getElementById("pay-method-bank").checked;
+  const btn = document.getElementById("pay-submit-btn");
+
+  if (useBank) {
+    const receiptEl = document.getElementById("pay-receipt");
+    const refEl = document.getElementById("pay-bank-ref");
+    Validate.clear(receiptEl, refEl);
+    if (!receiptEl.files || !receiptEl.files[0]) {
+      Validate.fail(receiptEl, "Please upload a receipt photo");
+      return;
+    }
+    if (typeof Validate.imageFile === "function") {
+      if (!Validate.imageFile(receiptEl.files[0], { optional: false })) return;
+    }
+    btn.disabled = true; btn.textContent = "Uploading…";
+    try {
+      const form = new FormData();
+      form.append("receipt", receiptEl.files[0]);
+      const ref = refEl.value.trim();
+      if (ref) form.append("reference", ref);
+      await Api.postForm(`/api/transactions/${id}/pay/bank-transfer`, form);
+      Ui.toast("Receipt submitted — awaiting finance verification");
+      document.getElementById("pay-modal").classList.remove("open");
+      loadTransactions();
+    } catch (err) { Ui.errorToast(err); }
+    finally { btn.disabled = false; btn.textContent = "Submit transfer"; }
+    return;
+  }
+
+  const nameEl = document.getElementById("pay-name");
+  const cardEl = document.getElementById("pay-card");
+  const expEl = document.getElementById("pay-expiry");
+  const cvvEl = document.getElementById("pay-cvv");
+  Validate.clear(nameEl, cardEl, expEl, cvvEl);
+  if (!Validate.required(nameEl, "Cardholder name")) return;
+  const digits = cardEl.value.replace(/\D/g, "");
+  if (digits.length !== 16) {
+    Validate.fail(cardEl, "Card number must be exactly 16 digits");
+    return;
+  }
+  if (!Validate.required(expEl, "Expiry")) return;
+  if (!/^\d{2}\/\d{2}$/.test(expEl.value.trim())) {
+    Validate.fail(expEl, "Use MM/YY format");
+    return;
+  }
+  if (!Validate.required(cvvEl, "CVV")) return;
+  if (!/^\d{3,4}$/.test(cvvEl.value.trim())) {
+    Validate.fail(cvvEl, "CVV must be 3 or 4 digits");
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = "Processing…";
+  try {
+    await Api.post(`/api/transactions/${id}/pay`, {
+      cardholderName: nameEl.value.trim(),
+      cardNumber: cardEl.value.trim(),
+      expiry: expEl.value.trim(),
+      cvv: cvvEl.value.trim(),
+    });
+    Ui.toast("Payment successful — invoice marked COMPLETED");
+    document.getElementById("pay-modal").classList.remove("open");
+    loadTransactions();
+  } catch (err) { Ui.errorToast(err); }
+  finally { btn.disabled = false; btn.textContent = "Pay now"; }
+});
+
+// ---------------- My Reviews ----------------
+async function loadReviews() {
+  const el = document.getElementById("tab-reviews");
+  el.innerHTML = `<div class="empty-state"><div class="glyph">⏳</div>Loading…</div>`;
+  try {
+    const items = await Api.get("/api/reviews/mine");
+    if (!items.length) { el.innerHTML = `<div class="empty-state"><div class="glyph">⭐</div>You haven't left any reviews yet.</div>`; return; }
+    el.innerHTML = items.map(r => `
+      <div class="card" style="margin-bottom:12px;">
+        <div style="display:flex; justify-content:space-between;">
+          <strong>${Ui.escape(r.propertyTitle || r.agentName || "Review")}</strong>
+          <span class="rating-stars">${Ui.stars(r.rating)}</span>
+        </div>
+        <p>${Ui.escape(r.comment || "")}</p>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:0.78rem; color:var(--text-muted);">${Ui.timeAgo(r.createdAt)} ${r.flagged ? '· <span style="color:var(--rose-500);">flagged</span>' : ""}</span>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-ghost btn-sm edit-review" data-id="${r.id}" data-rating="${r.rating}" data-comment="${Ui.escape(r.comment || "")}">Edit</button>
+            <button class="btn btn-danger btn-sm del-review" data-id="${r.id}">Delete</button>
+          </div>
+        </div>
+      </div>
+    `).join("");
+    document.querySelectorAll(".del-review").forEach(btn => btn.addEventListener("click", async () => {
+      if (!confirm("Delete this review?")) return;
+      try { await Api.del(`/api/reviews/${btn.dataset.id}`); Ui.toast("Review deleted"); loadReviews(); }
+      catch (err) { Ui.errorToast(err); }
+    }));
+    document.querySelectorAll(".edit-review").forEach(btn => btn.addEventListener("click", () => {
+      document.getElementById("rev-edit-id").value = btn.dataset.id;
+      document.getElementById("rev-edit-rating").value = btn.dataset.rating;
+      document.getElementById("rev-edit-comment").value = btn.dataset.comment;
+      document.getElementById("rev-edit-modal").classList.add("open");
+    }));
+  } catch (err) { Ui.errorToast(err); }
+}
+
+document.getElementById("rev-edit-cancel").addEventListener("click", () => document.getElementById("rev-edit-modal").classList.remove("open"));
+document.getElementById("rev-edit-save").addEventListener("click", async () => {
+  const id = document.getElementById("rev-edit-id").value;
+  const ratingEl = document.getElementById("rev-edit-rating");
+  const commentEl = document.getElementById("rev-edit-comment");
+  Validate.clear(ratingEl, commentEl);
+  if (!Validate.selectRequired(ratingEl, "a rating")) return;
+  if (!Validate.required(commentEl, "Comment")) return;
+  try {
+    await Api.put(`/api/reviews/${id}`, {
+      rating: Number(ratingEl.value),
+      comment: commentEl.value.trim(),
+    });
+    Ui.toast("Review updated");
+    document.getElementById("rev-edit-modal").classList.remove("open");
+    loadReviews();
+  } catch (err) { Ui.errorToast(err); }
+});
+
+const loaders = { wishlist: loadWishlist, appointments: loadAppointments, transactions: loadTransactions, reviews: loadReviews };
+loadWishlist();
+</script>
+</body>
+</html>
