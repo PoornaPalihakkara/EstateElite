@@ -209,12 +209,4 @@ Not licensed for commercial use unless the group decides otherwise.
 
 ---
 
-## Acknowledgments
-
-- SLIIT Faculty of Computing - SE2030 module  
-- Lab sheets: Agile Development, Design Patterns  
-- Group 26-MTR-SE2030-04
-
----
-
 **Estate Elite** - premium property sales, built with Spring Boot.
